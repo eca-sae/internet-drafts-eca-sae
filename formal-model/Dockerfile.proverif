@@ -1,0 +1,23 @@
+# --- Stage 1: The Builder ---
+# Use the large development image to build the tool
+FROM ocaml/opam:debian-11-ocaml-4.14 AS builder
+
+# Install all necessary build-time dependencies
+RUN sudo apt-get update && sudo apt-get install -y m4 pkg-config libgtk2.0-dev
+
+# Install the full proverif package 
+# Installs Proverif 2.05. as of Sept. 24, 2025
+RUN opam update && opam install proverif
+
+
+# --- Stage 2: The Final Image ---
+# Start from a minimal, clean Debian image
+FROM debian:11-slim
+
+# Copy only the compiled ProVerif program from the builder stage.
+# We find its location using `opam var bin`.
+COPY --from=builder /home/opam/.opam/4.14/bin/proverif /usr/local/bin/proverif
+
+# Set the final entrypoint
+ENTRYPOINT ["proverif"]
+
