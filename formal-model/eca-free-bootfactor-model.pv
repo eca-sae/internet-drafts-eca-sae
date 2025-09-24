@@ -1,0 +1,174 @@
+(* ECA Protocol - ProVerif Model
+  This version implements mutual authentication and is formally proven
+  to satisfy the security properties of authentication, freshness,
+  key binding, and confidentiality with disclosure-tolerant (public) BootFactor.
+*)
+
+
+(* --- Types --- *)
+type BootFactor.
+type InstanceFactor.
+type VFSeed.
+type ValidatorFactor.
+type IdentityKey.
+type PublicKey.
+type EncPrivateKey.
+type EncPublicKey.
+type IHB.
+type JP_Proof.
+type Signature.
+type Nonce.
+type MAC.
+type BoundHash.
+type PoPTag.
+type HmacKey.
+
+(* --- Constants and Channels --- *)
+free public_channel: channel.
+free bootFactor: BootFactor. (* BF is public, as intended *)
+
+(* --- Cryptographic Primitives --- *)
+
+(* Key Derivations *)
+fun deriveIdKey(BootFactor, ValidatorFactor): IdentityKey.
+fun derivePubKey(IdentityKey): PublicKey.
+fun deriveEncKey(BootFactor, InstanceFactor): EncPrivateKey [private].
+fun deriveEncPubKey(EncPrivateKey): EncPublicKey.
+fun deriveHmacKey(BootFactor, ValidatorFactor): HmacKey.
+
+(* MAC for initial proof *)
+fun deriveAuthKey(BootFactor, InstanceFactor): bitstring.
+fun computeMAC(bitstring, bitstring): MAC.
+reduc forall m: bitstring, k: bitstring; verifyMAC(m, computeMAC(m, k), k) = true.
+
+(* Protocol-specific calculations *)
+fun calculateIHB(BootFactor, InstanceFactor): IHB.
+fun calculateJP(BootFactor, ValidatorFactor): JP_Proof.
+fun calculateBoundHash(IHB, PublicKey, Nonce): BoundHash.
+fun computePoP(HmacKey, BoundHash): PoPTag.
+reduc forall k: HmacKey, h: BoundHash; verifyPoP(computePoP(k, h), k, h) = true.
+
+(* Standard Signatures and Encryption *)
+fun sign(bitstring, IdentityKey): Signature.
+reduc forall m: bitstring, ik: IdentityKey; verify(m, sign(m, ik), derivePubKey(ik)) = m.
+
+fun penc(ValidatorFactor, EncPublicKey): bitstring.
+reduc forall vf: ValidatorFactor, ek: EncPrivateKey; pdec(penc(vf, deriveEncPubKey(ek)), ek) = vf.
+
+fun mkVF(VFSeed, InstanceFactor): ValidatorFactor [private].
+
+(* --- Events and Queries --- *)
+event AttesterInitiates(BootFactor, InstanceFactor).
+event VerifierAccepts(BootFactor, InstanceFactor).
+event VFReleased(ValidatorFactor).
+event VerifierGeneratesNonce(Nonce).
+event AttesterUsesNonce(Nonce).
+event AttesterPresentsKey(PublicKey).
+event VerifierValidatesWithKey(PublicKey).
+
+(* Full Query Suite *)
+query bf: BootFactor, ifa: InstanceFactor;
+      inj-event(VerifierAccepts(bf, ifa)) ==> inj-event(AttesterInitiates(bf, ifa)).
+query n: Nonce;
+      event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)).
+query pk: PublicKey;
+      event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk)).
+query vf: ValidatorFactor; 
+      event(VFReleased(vf)) && attacker(vf).
+
+(* --- Protocol Participants --- *)
+
+let AttesterProcess(bf: BootFactor, ifa: InstanceFactor, verifierPubKey: PublicKey) =
+    (* Phase 1: Prove possession of bf using the instance factor *)
+    let authKey = deriveAuthKey(bf, ifa) in
+    let encKey = deriveEncKey(bf, ifa) in
+    let encPubKey = deriveEncPubKey(encKey) in
+    let ihb = calculateIHB(bf, ifa) in
+    event AttesterInitiates(bf, ifa);
+    let phase1_payload = (encPubKey, ihb) in
+    let phase1_mac = computeMAC(phase1_payload, authKey) in
+    out(public_channel, (phase1_payload, phase1_mac));
+
+    (* Phase 2: Receive the encrypted ValidatorFactor *)
+    in(public_channel, (encrypted_vf: bitstring, verifier_sig: Signature));
+    let verified_payload = verify(encrypted_vf, verifier_sig, verifierPubKey) in
+    let (vf_payload: bitstring, nonce: Nonce) = verified_payload in
+    event AttesterUsesNonce(nonce);
+    let vf = pdec(vf_payload, encKey) in
+
+    (* Phase 3: Final proof using BOTH bf and vf *)
+    let idKey = deriveIdKey(bf, vf) in
+    let pubKey = derivePubKey(idKey) in
+    event AttesterPresentsKey(pubKey);
+    let jp_proof = calculateJP(bf, vf) in
+    let hmacKey = deriveHmacKey(bf, vf) in
+    let bound_hash = calculateBoundHash(ihb, pubKey, nonce) in
+    let pop_tag = computePoP(hmacKey, bound_hash) in
+    let final_eat_payload = (ihb, jp_proof, nonce, pubKey, pop_tag) in
+    let final_signature = sign(final_eat_payload, idKey) in
+    out(public_channel, (final_eat_payload, final_signature, pubKey)).
+
+let VerifierProcess(expected_bf: BootFactor, expected_ifa: InstanceFactor, verifierIdKey: IdentityKey) =
+    (* Phase 1: Verify Attester's proof of possession *)
+    in(public_channel, (phase1_payload: bitstring, phase1_mac: MAC));
+    let (attester_enc_pk: EncPublicKey, received_ihb: IHB) = phase1_payload in
+    let expected_authKey = deriveAuthKey(expected_bf, expected_ifa) in
+
+    if verifyMAC(phase1_payload, phase1_mac, expected_authKey) then
+        let expected_ihb = calculateIHB(expected_bf, expected_ifa) in
+        if received_ihb = expected_ihb then
+            let expected_encKey = deriveEncKey(expected_bf, expected_ifa) in
+            let expected_encPubKey = deriveEncPubKey(expected_encKey) in
+            if attester_enc_pk = expected_encPubKey then
+                (* Phase 2: Create VF bound to instance factor, then release *)
+                new seed: VFSeed;
+                let vf = mkVF(seed, expected_ifa) in
+                event VFReleased(vf);
+                new nonce: Nonce;
+                event VerifierGeneratesNonce(nonce);
+                let encrypted_vf = penc(vf, attester_enc_pk) in
+                let verifier_payload = (encrypted_vf, nonce) in
+                let verifier_signature = sign(verifier_payload, verifierIdKey) in
+                out(public_channel, (verifier_payload, verifier_signature));
+
+                (* Phase 3: Verify the final proof of joint possession *)
+                in(public_channel, (final_eat_payload: bitstring, final_signature: Signature, final_pubKey: PublicKey));
+                let verified_final = verify(final_eat_payload, final_signature, final_pubKey) in
+                let (rec_ihb: IHB, rec_jp: JP_Proof, rec_nonce: Nonce, rec_pubKey: PublicKey, rec_pop: PoPTag) = verified_final in
+                if rec_nonce = nonce then
+                    let expected_idKey = deriveIdKey(expected_bf, vf) in
+                    let expected_pubKey = derivePubKey(expected_idKey) in
+                    if final_pubKey = expected_pubKey then
+                        event VerifierValidatesWithKey(final_pubKey);
+                        let expected_jp = calculateJP(expected_bf, vf) in
+                        if rec_jp = expected_jp then
+                            let expected_hmac_key = deriveHmacKey(expected_bf, vf) in
+                            let expected_bound_hash = calculateBoundHash(rec_ihb, rec_pubKey, rec_nonce) in
+                            if verifyPoP(rec_pop, expected_hmac_key, expected_bound_hash) then
+                                event VerifierAccepts(expected_bf, expected_ifa); 0
+                            else 0
+                        else 0
+                    else 0
+                else 0
+            else 0
+        else 0
+    else 0.
+
+(* --- Main Process --- *)
+process
+    new instanceFactor: InstanceFactor;
+    new verifierIdKey: IdentityKey;
+    let verifierPubKey = derivePubKey(verifierIdKey) in
+    (
+        AttesterProcess(bootFactor, instanceFactor, verifierPubKey)
+        |
+        VerifierProcess(bootFactor, instanceFactor, verifierIdKey)
+    )
+
+(* 
+Author's Address:  
+Nathanael Ritz
+Independent
+nathanritz@gmail.com
+*)
+    
