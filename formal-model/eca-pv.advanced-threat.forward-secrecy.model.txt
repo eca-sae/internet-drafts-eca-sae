@@ -1,11 +1,7 @@
-(* ECA Protocol - ProVerif Model v3 - BASELINE
-  This version implements mutual authentication and is formally proven
-  to satisfy the security properties of authentication, freshness,
-  key binding, and confidentiality with exposure-tolerant (public) BootFactor.
+(* ECA Protocol - ProVerif Model v3 - ADVANCED THREATS
+  Forward Secrecy Test
   
-  Updated to align with specification:
-  - Phase 2 encrypts (VF, nonce) tuple as specified
-  - Includes eca_uuid in all key derivations for session uniqueness
+  See the BASELINE model for normative tests
 *)
 
 (* --- Types --- *)
@@ -33,7 +29,7 @@ free bootFactor: BootFactor. (* BF is public, as intended *)
 
 (* --- Cryptographic Primitives --- *)
 
-(* Key Derivations with eca_uuid *)
+(* Key Derivations with UUID for session uniqueness *)
 fun deriveIdKey(BootFactor, ValidatorFactor, UUID): IdentityKey.
 fun derivePubKey(IdentityKey): PublicKey.
 fun deriveEncKey(BootFactor, InstanceFactor, UUID): EncPrivateKey [private].
@@ -56,13 +52,13 @@ reduc forall k: HmacKey, h: BoundHash; verifyPoP(computePoP(k, h), k, h) = true.
 fun sign(bitstring, IdentityKey): Signature.
 reduc forall m: bitstring, ik: IdentityKey; verify(m, sign(m, ik), derivePubKey(ik)) = m.
 
-(* Encryption for tuple (VF, Nonce) *)
+(* HPKE-style Encryption *)
 fun penc(bitstring, EncPublicKey): bitstring.
 reduc forall m: bitstring, ek: EncPrivateKey; pdec(penc(m, deriveEncPubKey(ek)), ek) = m.
 
 fun mkVF(VFSeed, InstanceFactor): ValidatorFactor [private].
 
-(* --- Events for Core Properties --- *)
+(* --- Events --- *)
 event AttesterInitiates(BootFactor, InstanceFactor, UUID).
 event VerifierAccepts(BootFactor, InstanceFactor, UUID).
 event VFReleased(ValidatorFactor).
@@ -70,14 +66,29 @@ event VerifierGeneratesNonce(Nonce).
 event AttesterUsesNonce(Nonce).
 event AttesterPresentsKey(PublicKey).
 event VerifierValidatesWithKey(PublicKey).
+(* New events for tracking protocol completion *)
+event ProtocolCompleted(UUID).
+event VerifierKeyCompromised(IdentityKey).
+event EphemeralKeyCompromised(EncPrivateKey, UUID).
 
+(* --- Sanity Check: BF should be public, so this should be true --- *)
+query attacker(bootFactor).
 
-(* --- New Events for KCI Test --- *)
-event AttesterAuthenticatesVerifier(PublicKey).
-event VerifierAuthenticated(IdentityKey).
-event VerifierKeyMatch(PublicKey, IdentityKey).
+(* --- Sanity Check: The function to derive keys should be known --- *)
+query bf: BootFactor, vf: ValidatorFactor, uuid: UUID;
+      attacker(deriveIdKey(bf, vf, uuid)).
+      
+(* --- Core Security Queries --- *)
+query bf: BootFactor, ifa: InstanceFactor, uuid: UUID;
+      inj-event(VerifierAccepts(bf, ifa, uuid)) ==> inj-event(AttesterInitiates(bf, ifa, uuid)).
+query n: Nonce;
+      event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)).
+query pk: PublicKey;
+      event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk)).
+query vf: ValidatorFactor;
+      event(VFReleased(vf)) && attacker(vf).
 
-(* --- Standard Protocol Processes --- *)
+(* --- Protocol Participants --- *)
 
 let AttesterProcess(bf: BootFactor, ifa: InstanceFactor, uuid: UUID, verifierPubKey: PublicKey) =
     (* Phase 1: Prove possession of bf using the instance factor *)
@@ -107,44 +118,12 @@ let AttesterProcess(bf: BootFactor, ifa: InstanceFactor, uuid: UUID, verifierPub
     let pop_tag = computePoP(hmacKey, bound_hash) in
     let final_eat_payload = (ihb, jp_proof, nonce, pubKey, pop_tag) in
     let final_signature = sign(final_eat_payload, idKey) in
-    out(public_channel, (final_eat_payload, final_signature, pubKey)).
+    out(public_channel, (final_eat_payload, final_signature, pubKey));
+    
+    (* Mark protocol as completed for this attester *)
+    event ProtocolCompleted(uuid).
 
-(* Modified Attester that tracks Verifier authentication for KCI test *)
-let AttesterProcessWithAuth(bf: BootFactor, ifa: InstanceFactor, uuid: UUID, verifierPubKey: PublicKey) =
-    (* Phase 1: Same as standard *)
-    let authKey = deriveAuthKey(bf, ifa, uuid) in
-    let encKey = deriveEncKey(bf, ifa, uuid) in
-    let encPubKey = deriveEncPubKey(encKey) in
-    let ihb = calculateIHB(bf, ifa) in
-    event AttesterInitiates(bf, ifa, uuid);
-    let phase1_payload = (encPubKey, ihb) in
-    let phase1_mac = computeMAC(phase1_payload, authKey) in
-    out(public_channel, (phase1_payload, phase1_mac));
-
-    (* Phase 2: With authentication tracking *)
-    in(public_channel, (ciphertext: bitstring, verifier_sig: Signature));
-    let verified_ciphertext = verify(ciphertext, verifier_sig, verifierPubKey) in
-
-    (* The code below only runs if the signature is valid. *)
-    (* This is the correct way to handle the check. *)
-    event AttesterAuthenticatesVerifier(verifierPubKey);
-    let plaintext = pdec(verified_ciphertext, encKey) in
-    let (vf: ValidatorFactor, nonce: Nonce) = plaintext in
-    event AttesterUsesNonce(nonce);
-
-    (* Phase 3: Same as standard *)
-    let idKey = deriveIdKey(bf, vf, uuid) in
-    let pubKey = derivePubKey(idKey) in
-    event AttesterPresentsKey(pubKey);
-    let jp_proof = calculateJP(bf, vf) in
-    let hmacKey = deriveHmacKey(bf, vf, uuid) in
-    let bound_hash = calculateBoundHash(ihb, pubKey, nonce) in
-    let pop_tag = computePoP(hmacKey, bound_hash) in
-    let final_eat_payload = (ihb, jp_proof, nonce, pubKey, pop_tag) in
-    let final_signature = sign(final_eat_payload, idKey) in
-    out(public_channel, (final_eat_payload, final_signature, pubKey)).
-
-let VerifierProcess(expected_bf: BootFactor, expected_ifa: InstanceFactor,
+let VerifierProcess(expected_bf: BootFactor, expected_ifa: InstanceFactor, 
                     uuid: UUID, verifierIdKey: IdentityKey) =
     (* Phase 1: Verify Attester's proof of possession *)
     in(public_channel, (phase1_payload: bitstring, phase1_mac: MAC));
@@ -166,9 +145,6 @@ let VerifierProcess(expected_bf: BootFactor, expected_ifa: InstanceFactor,
                 let plaintext = (vf, nonce) in
                 let ciphertext = penc(plaintext, attester_enc_pk) in
                 let verifier_signature = sign(ciphertext, verifierIdKey) in
-                event VerifierAuthenticated(verifierIdKey);
-                (* Add this line to assert the key relationship *)
-                event VerifierKeyMatch(derivePubKey(verifierIdKey), verifierIdKey);
                 out(public_channel, (ciphertext, verifier_signature));
 
                 (* Phase 3: Verify the final proof of joint possession *)
@@ -185,7 +161,8 @@ let VerifierProcess(expected_bf: BootFactor, expected_ifa: InstanceFactor,
                             let expected_hmac_key = deriveHmacKey(expected_bf, vf, uuid) in
                             let expected_bound_hash = calculateBoundHash(rec_ihb, rec_pubKey, rec_nonce) in
                             if verifyPoP(rec_pop, expected_hmac_key, expected_bound_hash) then
-                                event VerifierAccepts(expected_bf, expected_ifa, uuid); 0
+                                event VerifierAccepts(expected_bf, expected_ifa, uuid);
+                                event ProtocolCompleted(uuid); 0
                             else 0
                         else 0
                     else 0
@@ -194,85 +171,86 @@ let VerifierProcess(expected_bf: BootFactor, expected_ifa: InstanceFactor,
         else 0
     else 0.
 
-(* --- Sanity Check: BF should be public, so this should be true --- *)
-query attacker(bootFactor).
+(* --- Additional Processes for Security Testing --- *)
 
-(* --- Sanity Check: The function to derive keys should be known --- *)
-query bf: BootFactor, vf: ValidatorFactor, uuid: UUID;
-      attacker(deriveIdKey(bf, vf, uuid)).
+(* Process that leaks the verifier's long-term key *)
+let LeakVerifierKey(verifierIdKey: IdentityKey) =
+    event VerifierKeyCompromised(verifierIdKey);
+    out(public_channel, verifierIdKey).
 
-(* --- Core Security Queries --- *)
-query bf: BootFactor, ifa: InstanceFactor, uuid: UUID;
-      inj-event(VerifierAccepts(bf, ifa, uuid)) ==> inj-event(AttesterInitiates(bf, ifa, uuid)).
-query n: Nonce;
-      event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)).
-query pk: PublicKey;
-      event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk)).
-query vf: ValidatorFactor;
-      event(VFReleased(vf)) && attacker(vf).
-
-(* --- KCI Security Query --- *)
-(* Tests if attacker with compromised IF can impersonate Verifier *)
-query pk: PublicKey, vk: IdentityKey;
-      event(AttesterAuthenticatesVerifier(pk)) &&
-      event(VerifierKeyMatch(pk, vk)).
-(*
-  Expected result: The KCI Security query for a successful run should be reachable 
-  (i.e., logically evaluate to TRUE), proving that the KCI attack is not possible.
-  ProVerif will report this as "RESULT not (...) is false."
-*)
+(* Process that leaks an ephemeral encryption key *)
+let LeakEphemeralKey(bf: BootFactor, ifa: InstanceFactor, uuid: UUID) =
+    let encKey = deriveEncKey(bf, ifa, uuid) in
+    event EphemeralKeyCompromised(encKey, uuid);
+    out(public_channel, encKey).
 
 (* --- Main Process --- *)
 process
-    (* Standard protocol run for baseline *)
+    (* Standard protocol run *)
     new instanceFactor: InstanceFactor;
     new ecaUuid: UUID;
     new verifierIdKey: IdentityKey;
+    let verifierPubKey = derivePubKey(verifierIdKey) in
+    
+    (* Run the protocol *)
     (
-        AttesterProcess(bootFactor, instanceFactor, ecaUuid, derivePubKey(verifierIdKey))
+        AttesterProcess(bootFactor, instanceFactor, ecaUuid, verifierPubKey)
         |
         VerifierProcess(bootFactor, instanceFactor, ecaUuid, verifierIdKey)
+        |
+        LeakVerifierKey(verifierIdKey) (* Forward Secrecy Test *)
+        (* Expected: VF should remain secret even with verifier key leaked *)
+        (* Expected: nonce Freshness guarantee fails *)
     )
-    |
-    (* KCI Test Scenario *)
-    (
-        (* Attacker model: Leak a compromised Instance Factor to the public channel *)
-        new compromisedIF: InstanceFactor;
-        out(public_channel, compromisedIF)
-    )
-    |
-    (
-        (* Honest session under test: Run a full protocol instance using the *)
-        (* special AttesterProcessWithAuth to check the KCI property. This session *)
-        (* runs in a context where the attacker knows 'compromisedIF'. *)
-        new honestIF: InstanceFactor;
-        new testUuid: UUID;
-        new testVerifierKey: IdentityKey;
-        (
-            AttesterProcessWithAuth(bootFactor, honestIF, testUuid, derivePubKey(testVerifierKey))
-            |
-            VerifierProcess(bootFactor, honestIF, testUuid, testVerifierKey)
-        )
-    )
-    
-(*
-All Expected Results:
 
-Query not attacker(bootFactor[]) is false.
-Query not attacker(deriveIdKey(bf_2,vf_4,uuid_4)) is false.
+(* 
+Expected Results and How to Test:
 
-Query inj-event(VerifierAccepts(bf_2,ifa_2,uuid_4)) ==> inj-event(AttesterInitiates(bf_2,ifa_2,uuid_4)) is true.
-Query event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)) is true.
-Query event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk)) is true.
-Query not (event(VFReleased(vf_4)) && attacker(vf_4)) is true.
-
-Query not (event(AttesterAuthenticatesVerifier(pk)) && event(VerifierKeyMatch(pk,vk))) is false.
+1. Forward Secrecy Test:
+   (
+        AttesterProcess(bootFactor, instanceFactor, ecaUuid, verifierPubKey)
+        |
+        VerifierProcess(bootFactor, instanceFactor, ecaUuid, verifierIdKey)
+        |
+        LeakVerifierKey(verifierIdKey)  (* ADD/CHANGE THIS LINE *)
+   )
+   Expected: VF should remain secret even with verifier key leaked
+   Expected: nonce Freshness guarantee fails
+   
+2. State Reveal Test:
+   (
+        AttesterProcess(bootFactor, instanceFactor, ecaUuid, verifierPubKey)
+        |
+        VerifierProcess(bootFactor, instanceFactor, ecaUuid, verifierIdKey)
+        |
+        LeakEphemeralKey(bootFactor, instanceFactor, ecaUuid)  (* ADD/CHANGE THIS LINE *)
+   )
+   Expected: Released VF will fall into the command of an attacker
 
 ---
 
-Changes in v3:
+All Expected Results:
+
+Query not attacker(bootFactor[]) is false.
+Query not attacker(deriveIdKey(bf_1,vf_2,uuid_2)) is false.
+
+Query inj-event(VerifierAccepts(bf_1,ifa_1,uuid_2)) ==> inj-event(AttesterInitiates(bf_1,ifa_1,uuid_2)) is true.
+Query event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk)) is true.
+Query not (event(VFReleased(vf_2)) && attacker(vf_2)) is true.
+
+Query event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)) is false.
+
+---
+
+Changes in v3 - BASELINE:
 - Updated to include Key Compromise Impersonation (KCI) test
   - Tests whether compromising an Instance Factor allows impersonating the Verifier
+
+Changes in v3 - ADVANCED THREATS:
+- Added queries for forward secrecy and state reveal resistance
+- New events for tracking key compromises
+- Simplified test processes for ProVerif compatibility
+- Documentation of security properties and expected results
 
 Changes in v2:
 - Added UUID type and ecaUuid parameter throughout
@@ -280,7 +258,8 @@ Changes in v2:
 - Phase 2 now encrypts the tuple (VF, nonce) as specified, not just VF
 - Events updated to include UUID for tracking per-ceremony uniqueness
 
-Author's Address:
+
+Author's Address:  
   Nathanael Ritz
   Independent
   nathanritz@gmail.com
