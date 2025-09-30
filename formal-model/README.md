@@ -71,8 +71,6 @@ sequenceDiagram
     V->>V: Sign ciphertext with Verifier Ed25519 key
     ProVerifVer->>ProVerifVer: event VFReleased(vf)
 
-    ProVerifAtt->>ProVerifAtt: event VerifierAuthenticated(verifierIdKey)
-    ProVerifAtt->>ProVerifAtt: event VerifierKeyMatch(derivePubKey(verifierIdKey),verifierIdKey)
     V->>SAE: PUT VER/{eca_uuid}/phase2_ciphertext
     V->>SAE: PUT VER/{eca_uuid}/phase2_verifier_sig
     V->>SAE: PUT VER/{eca_uuid}/phase2.status (0 bytes)
@@ -89,6 +87,9 @@ sequenceDiagram
     
     SAE->>A: GET VER/{eca_uuid}/phase2_ciphertext
     SAE->>A: GET VER/{eca_uuid}/phase2_verifier_sig
+
+    ProVerifAtt->>ProVerifAtt: event VerifierAuthenticated(verifierIdKey)
+    ProVerifAtt->>ProVerifAtt: event VerifierKeyMatch(derivePubKey(verifierIdKey),verifierIdKey)
 
     ProVerifAtt->>ProVerifAtt: event AttesterAuthenticatesVerifier(verifierPubKey)
     A->>A: Verify Verifier signature, HPKE decrypt
