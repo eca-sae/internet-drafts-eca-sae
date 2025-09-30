@@ -180,6 +180,9 @@ The model successfully proves security properties hold against this adversary. F
 
 
 ## Verbose output from a succesful (happy-path) exchange 
+
+[The prototype for ECA/SAE is available from it's dedicated repository](https://github.com/eca-sae/prototype-eca-sae)
+
 ```bash
 [RUN 1] Watching logs and waiting for result file...
 attester-e8537b23  | [ATT-DIAG] My Hostname: 8f74e95a5f81, IP: 172.29.250.3
