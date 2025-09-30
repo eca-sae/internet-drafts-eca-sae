@@ -31,12 +31,20 @@ For unhappy-path models (e.g., forward secrecy, state reveal), see other files i
 sequenceDiagram
     participant ProVerifAtt as ProVerif Attester Events
     participant A as Attester
-    participant SAE as SAE Abstract
+    participant SAE as SAE Repo Abstract
     participant V as Verifier
     participant ProVerifVer as ProVerif Verifier Events & Queries
 
-    Note over A,V: Phase 1: Authenticated Channel Setup
+    Note over A,V: Phase 1: Attester Generates and Publishes Evidence
 
+    Note over V: VER activates with work-order for given {eca_uuid}/{exchange_id}
+    Note over V: VER polls ATT outbox for P1 Evidence
+    loop Poll with backoff
+        V->>SAE: HEAD ATT/{eca_uuid}/phase1.status
+        SAE-->>V: 404 (not ready)
+    end
+
+    Note over A: ATT boots with work-order for given {eca_uuid}
     ProVerifAtt->>ProVerifAtt: event AttesterInitiates(bf,ifa,uuid)
     A->>A: Compute encPubKey, IHB, authKey (BF+IF derived)
     A->>A: Generate phase1_mac
@@ -44,19 +52,20 @@ sequenceDiagram
     A->>SAE: PUT ATT/{eca_uuid}/phase1_payload (encPubKey, IHB)
     A->>SAE: PUT ATT/{eca_uuid}/phase1_mac
     A->>SAE: PUT ATT/{eca_uuid}/phase1.status (0 bytes)
-    
-    Note over V,A: Phase 2: Challenge & VF Release
-    
+
+    Note over A: ATT polls VER outbox for P2 artifacts
     loop Poll with backoff
-        V->>SAE: HEAD ATT/{exchange_id}/phase1.status
-        SAE-->>V: 404 (not ready)
+        A->>SAE: HEAD VER/{eca_uuid}/phase2.status
+        SAE-->>A: 404 (not ready)
     end
-    
+
+    Note over V,A: Phase 2: Gate Validation & VF Release
+
     V->>SAE: HEAD ATT/{eca_uuid}/phase1.status
     SAE-->>V: 200 OK (Content-Length: 0)
     
-    SAE->>V: GET ATT/{eca_uuid}/phase1_payload
-    SAE->>V: GET ATT/{eca_uuid}/phase1_mac
+    V->>SAE: GET ATT/{eca_uuid}/phase1_payload
+    V->>SAE: GET ATT/{eca_uuid}/phase1_mac
     
     Note over V: Validation Gates 1-4
     V->>V: Gate 1: MAC Verification
@@ -74,19 +83,20 @@ sequenceDiagram
     V->>SAE: PUT VER/{eca_uuid}/phase2_ciphertext
     V->>SAE: PUT VER/{eca_uuid}/phase2_verifier_sig
     V->>SAE: PUT VER/{eca_uuid}/phase2.status (0 bytes)
-    
-    Note over A,V: Phase 3: Joint Possession Proof
-    
+
+    Note over V: VER polls ATT outbox for final P3 Evidence
     loop Poll with backoff
-        A->>SAE: HEAD S3/{eca_uuid}/phase2.status
-        SAE-->>A: 404 (not ready)
+        V->>SAE: HEAD ATT/{eca_uuid}/phase3.status
+        SAE-->>V: 404 (not ready)
     end
-    
+
+    Note over A,V: Phase 3: Joint Possession Proof
+        
     A->>SAE: HEAD VER/{eca_uuid}/phase2.status
     SAE-->>A: 200 OK (Content-Length: 0)
     
-    SAE->>A: GET VER/{eca_uuid}/phase2_ciphertext
-    SAE->>A: GET VER/{eca_uuid}/phase2_verifier_sig
+    A->>SAE: GET VER/{eca_uuid}/phase2_ciphertext
+    A->>SAE: GET VER/{eca_uuid}/phase2_verifier_sig
 
     ProVerifAtt->>ProVerifAtt: event VerifierAuthenticated(verifierIdKey)
     ProVerifAtt->>ProVerifAtt: event VerifierKeyMatch(derivePubKey(verifierIdKey),verifierIdKey)
@@ -101,28 +111,24 @@ sequenceDiagram
     A->>A: Compute JP Proof (BF+VF binding)
     A->>A: Compute PoP tag (HMAC with hmacKey)
     A->>A: Create signed EAT with claims
-    
+
     ProVerifAtt->>ProVerifAtt: event AttesterPresentsKey(pubKey)
+
+    Note over A: NOTE: Post-attestion flow out of scope
+
     A->>SAE: PUT ATT/{eca_uuid}/phase3_final_eat
     A->>SAE: PUT ATT/{eca_uuid}/phase3_final_sig
     A->>SAE: PUT ATT/{eca_uuid}/phase3_pubKey
     A->>SAE: PUT ATT/{eca_uuid}/phase3.status (0 bytes)
-    
-    Note over V,A: Final Verification & Attestation Result
-    
-    loop Poll with backoff
-        V->>SAE: HEAD ATT/{eca_uuid}/phase3.status
-        SAE-->>V: 404 (not ready)
-    end
-    
+        
     V->>SAE: HEAD ATT/{eca_uuid}/phase3.status
     SAE-->>V: 200 OK (Content-Length: 0)
     
-    SAE->>V: GET ATT/{eca_uuid}/phase3_final_eat
-    SAE->>V: GET ATT/{eca_uuid}/phase3_final_sig
-    SAE->>V: GET ATT/{eca_uuid}/phase3_pubKey
+    V->>SAE: GET ATT/{eca_uuid}/phase3_final_eat
+    V->>SAE: GET ATT/{eca_uuid}/phase3_final_sig
+    V->>SAE: GET ATT/{eca_uuid}/phase3_pubKey
     
-    Note over V: Validation Gates 5-11
+    Note over V: Final Gates 5-11
     V->>V: Gate 5: Evidence Time Window
     V->>V: Gate 6: EAT Schema Compliance
     ProVerifVer->>ProVerifVer: event VerifierValidatesWithKey(final_pubKey)
@@ -132,15 +138,10 @@ sequenceDiagram
     V->>V: Gate 10: PoP Validation
     ProVerifVer->>ProVerifVer: event VerifierAccepts(bf,ifa,uuid)
     V->>V: Gate 11: Identity Uniqueness
-    
-    V->>V: Generate Attestation Result (AR)
-    Note over V: Security Queries Verified:
-    Note over ProVerifVer: ✓ Authentication: inj-event(VerifierAccepts) ==> inj-event(AttesterInitiates)
-    Note over ProVerifVer: ✓ Freshness: event(AttesterUsesNonce) ==> event(VerifierGeneratesNonce)
-    Note over ProVerifVer: ✓ Key Binding: event(VerifierValidatesWithKey) ==> event(AttesterPresentsKey)
-    Note over ProVerifVer: ✓ Confidentiality: not (event(VFReleased) && attacker(vf))
 
-    V->>A: Deliver AR directly (optional/out of doc scope) 
+    Note over A,V: AR transmission mechanism out of scope
+    V->>V: Generate Attestation Result (AR)
+    V->>A: Deliver AR (optional) 
 ```
 
 ## Proven Security Properties within the baseline model 
