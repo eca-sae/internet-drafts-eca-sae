@@ -144,26 +144,6 @@ sequenceDiagram
     V->>A: Deliver AR (optional) 
 ```
 
-## Proven Security Properties within the baseline model 
-
-The events in this flow diagram correspond to the following proven properties from the formal model (`eca-pv.baseline.happy-path.model.pv`):
-
-| Security Property | Corresponding Events | Result |
-|-------------------|---------------------|---------|
-| **Authentication** | `AttesterInitiates` → `VerifierAccepts` | ✅ True |
-| **Freshness** | `VerifierGeneratesNonce` → `AttesterUsesNonce` | ✅ True |
-| **Key Binding** | `AttesterPresentsKey` → `VerifierValidatesWithKey` | ✅ True |
-| **Confidentiality** | `VFReleased` without attacker(vf) | ✅ True |
-
-## Threat Model Context
-
-This baseline happy-path model assumes:
-- **Network Attacker**: Dolev-Yao adversary controlling communications
-- **Public Boot Factor**: BF is known to the attacker from the start
-- **Honest Participants**: Attester and Verifier follow the protocol
-
-The model successfully proves security properties hold against this adversary. For advanced threat models (State Reveal, Key Compromise), see the separate ProVerif models referenced in [Appendix A.2](https://www.ietf.org/archive/id/draft-ritz-eca-00.html#name-boundary-analysis-advanced-).
-
 ## ProVerif Events to ECA Protocol Mapping:
 
 | ProVerif Event | ECA Protocol Meaning | Phase | Validation Gate |
@@ -179,6 +159,21 @@ The model successfully proves security properties hold against this adversary. F
 | `VerifierValidatesWithKey(pk)` | Verifier confirms key binding | 3 | Gate 9 |
 | `VerifierAccepts(bf,ifa,uuid)` | Ceremony completes successfully | 3 | Gates 5-11 |
 
+## Threat Model Context
+
+This baseline happy-path model assumes:
+- **Network Attacker**: Dolev-Yao adversary controlling communications
+- **Public Boot Factor**: BF is known to the attacker from the start
+- **Honest Participants**: Attester and Verifier follow the protocol
+
+The model successfully proves security properties hold against this adversary. For advanced threat models (State Reveal, Key Compromise), see the separate ProVerif models referenced in [Appendix A.2](https://www.ietf.org/archive/id/draft-ritz-eca-00.html#name-boundary-analysis-advanced-).
+
+| Security Property | Corresponding Events | Result |
+|-------------------|---------------------|---------|
+| **Authentication** | `AttesterInitiates` → `VerifierAccepts` | ✅ True |
+| **Freshness** | `VerifierGeneratesNonce` → `AttesterUsesNonce` | ✅ True |
+| **Key Binding** | `AttesterPresentsKey` → `VerifierValidatesWithKey` | ✅ True |
+| **Confidentiality** | `VFReleased` without attacker(vf) | ✅ True |
 
 ## Verbose output from a succesful (happy-path) exchange 
 
