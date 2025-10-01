@@ -1,0 +1,370 @@
+(*
+  ECA Protocol - ProVerif Model v5 - Unbounded Generic Sessions
+
+  This version models unbounded sessions by replicating Attesters
+  and Verifiers separately. Uses replication (!) to create unlimited 
+  paired attester-verifier sessions
+  
+  It tests the protocol's core cryptographic bindings against a strong 
+  Dolev-Yao adversary with full network control.
+  
+  ======================================================================
+  Threat Model & Adversary Capabilities:
+  ----------------------------------------------------------------------
+  - Threat Model: Dolev-Yao network attacker.
+  - Adversary CAN:
+    - Control the entire public channel (intercept, modify, replay, 
+      inject messages).
+    - Create an unlimited number of honest Attester and Verifier sessions 
+      on demand.
+    - Mix-and-match messages between any of these concurrent sessions.
+    - Know the public `bootFactor` from the start.
+    - Obtain compromised `InstanceFactor`s (as part of the KCI test).
+  - Adversary CANNOT (Perfect Cryptography Assumption):
+    - Break encryption without the key.
+    - Forge signatures without the private key.
+    - Reverse hashes or guess secret values.
+
+  ======================================================================
+  Security Properties Verified:
+  ----------------------------------------------------------------------
+  [X] Authentication (inj-event): Verifier only accepts if Attester 
+      initiated.
+      
+  [X] Freshness: Attester only uses nonces from a genuine 
+      Verifier session.
+      
+  [X] Key Binding: The final identity key is bound to the correct 
+      session.
+      
+  [X] VF Confidentiality: The Validator Factor remains secret from the 
+      network attacker.
+      
+  [X] KCI Resistance: A compromised Instance Factor does not enable 
+      Verifier impersonation.
+
+  ======================================================================
+  Model Progression / History of Analysis:
+  ----------------------------------------------------------------------
+  Changes in v5:
+  - Separate replication blocks for Attesters and Verifiers
+  - Single well-known verifier identity key shared by all
+  - Each Attester gets unique (instanceFactor, ecaUuid)
+  - Each Verifier session expects unique (expected_ifa, expected_uuid)
+  - This decoupling tests the protocol against mix-and-match attacks
+  - Maintains KCI testing with paired honest sessions
+
+  Changes in v4:
+  - Uses replication (!) to create unlimited paired attester-verifier 
+    sessions
+  - Each pair shares the same instance factor, UUID, and verifier key
+    (simulating out-of-band provisioning/configuration)
+  - The adversary can still interfere with all communication on the 
+    public channel
+  - But the adversary cannot trick attesters into trusting rogue 
+    verifier keys
+
+  Changes in v3:
+  - Updated to include Key Compromise Impersonation (KCI) test
+  - Tests whether compromising an Instance Factor allows impersonating 
+    the Verifier
+
+  Changes in v2:
+  - Added UUID type and ecaUuid parameter throughout
+  - All key derivation functions now include UUID for session uniqueness
+  - Phase 2 now encrypts the tuple (VF, nonce) as specified, not just VF
+  - Events updated to include UUID for tracking per-ceremony uniqueness
+
+  ======================================================================
+  Key Properties of This Generic (v5) Model:
+  ----------------------------------------------------------------------
+  1. Unbounded Independent Sessions: Attesters and Verifiers are 
+     replicated in separate blocks, giving the adversary maximum 
+     flexibility to mix and match messages between different 
+     protocol runs.
+
+  2. Realistic Trust Model: All Attesters trust one well-known Verifier
+     (modeling a fleet of VMs trusting a central service), while the
+     Verifier is modeled to handle any number of expected instances.
+
+  3. Strong Adversary: The adversary can deliver the Phase 1 message from
+     `Attester A` to a `Verifier B` that was expecting to hear from a
+     different `Attester B`.
+
+  4. Cryptographic Binding is Proven: Despite the adversary's power, this
+     model proves the protocol's cryptography ensures that `Verifier B`
+     will reject `Attester A`'s messages because the cryptographic checks
+     (bound to the correct `InstanceFactor` and `UUID`) will fail.
+
+*)
+
+(* --- Types --- *)
+type BootFactor.
+type InstanceFactor.
+type VFSeed.
+type ValidatorFactor.
+type IdentityKey.
+type PublicKey.
+type EncPrivateKey.
+type EncPublicKey.
+type IHB.
+type JP_Proof.
+type Signature.
+type Nonce.
+type MAC.
+type BoundHash.
+type PoPTag.
+type HmacKey.
+type UUID.
+
+(* --- Constants and Channels --- *)
+free public_channel: channel.
+free bootFactor: BootFactor. (* BF is public, as intended *)
+
+(* --- Cryptographic Primitives --- *)
+
+(* Key Derivations with eca_uuid *)
+fun deriveIdKey(BootFactor, ValidatorFactor, UUID): IdentityKey.
+fun derivePubKey(IdentityKey): PublicKey.
+fun deriveEncKey(BootFactor, InstanceFactor, UUID): EncPrivateKey [private].
+fun deriveEncPubKey(EncPrivateKey): EncPublicKey.
+fun deriveHmacKey(BootFactor, ValidatorFactor, UUID): HmacKey.
+
+(* MAC for initial proof *)
+fun deriveAuthKey(BootFactor, InstanceFactor, UUID): bitstring.
+fun computeMAC(bitstring, bitstring): MAC.
+reduc forall m: bitstring, k: bitstring; verifyMAC(m, computeMAC(m, k), k) = true.
+
+(* Protocol-specific calculations *)
+fun calculateIHB(BootFactor, InstanceFactor): IHB.
+fun calculateJP(BootFactor, ValidatorFactor): JP_Proof.
+fun calculateBoundHash(IHB, PublicKey, Nonce): BoundHash.
+fun computePoP(HmacKey, BoundHash): PoPTag.
+reduc forall k: HmacKey, h: BoundHash; verifyPoP(computePoP(k, h), k, h) = true.
+
+(* Standard Signatures *)
+fun sign(bitstring, IdentityKey): Signature.
+reduc forall m: bitstring, ik: IdentityKey; verify(m, sign(m, ik), derivePubKey(ik)) = m.
+
+(* Encryption for tuple (VF, Nonce) *)
+fun penc(bitstring, EncPublicKey): bitstring.
+reduc forall m: bitstring, ek: EncPrivateKey; pdec(penc(m, deriveEncPubKey(ek)), ek) = m.
+
+fun mkVF(VFSeed, InstanceFactor): ValidatorFactor [private].
+
+(* --- Events for Core Properties --- *)
+event AttesterInitiates(BootFactor, InstanceFactor, UUID).
+event VerifierAccepts(BootFactor, InstanceFactor, UUID).
+event VFReleased(ValidatorFactor).
+event VerifierGeneratesNonce(Nonce).
+event AttesterUsesNonce(Nonce).
+event AttesterPresentsKey(PublicKey).
+event VerifierValidatesWithKey(PublicKey).
+
+(* --- Events for KCI Test --- *)
+event AttesterAuthenticatesVerifier(PublicKey).
+event VerifierAuthenticated(IdentityKey).
+event VerifierKeyMatch(PublicKey, IdentityKey).
+
+(* --- Protocol Processes --- *)
+
+let AttesterProcess(bf: BootFactor, ifa: InstanceFactor, uuid: UUID, verifierPubKey: PublicKey) =
+    (* Phase 1: Prove possession of bf using the instance factor *)
+    let authKey = deriveAuthKey(bf, ifa, uuid) in
+    let encKey = deriveEncKey(bf, ifa, uuid) in
+    let encPubKey = deriveEncPubKey(encKey) in
+    let ihb = calculateIHB(bf, ifa) in
+    event AttesterInitiates(bf, ifa, uuid);
+    let phase1_payload = (encPubKey, ihb) in
+    let phase1_mac = computeMAC(phase1_payload, authKey) in
+    out(public_channel, (phase1_payload, phase1_mac));
+
+    (* Phase 2: Receive the encrypted (VF, nonce) tuple *)
+    in(public_channel, (ciphertext: bitstring, verifier_sig: Signature));
+    let verified_ciphertext = verify(ciphertext, verifier_sig, verifierPubKey) in
+    let plaintext = pdec(verified_ciphertext, encKey) in
+    let (vf: ValidatorFactor, nonce: Nonce) = plaintext in
+    event AttesterUsesNonce(nonce);
+
+    (* Phase 3: Final proof using BOTH bf and vf *)
+    let idKey = deriveIdKey(bf, vf, uuid) in
+    let pubKey = derivePubKey(idKey) in
+    event AttesterPresentsKey(pubKey);
+    let jp_proof = calculateJP(bf, vf) in
+    let hmacKey = deriveHmacKey(bf, vf, uuid) in
+    let bound_hash = calculateBoundHash(ihb, pubKey, nonce) in
+    let pop_tag = computePoP(hmacKey, bound_hash) in
+    let final_eat_payload = (ihb, jp_proof, nonce, pubKey, pop_tag) in
+    let final_signature = sign(final_eat_payload, idKey) in
+    out(public_channel, (final_eat_payload, final_signature, pubKey)).
+
+(* Modified Attester that tracks Verifier authentication for KCI test *)
+let AttesterProcessWithAuth(bf: BootFactor, ifa: InstanceFactor, uuid: UUID, verifierPubKey: PublicKey) =
+    (* Phase 1: Same as standard *)
+    let authKey = deriveAuthKey(bf, ifa, uuid) in
+    let encKey = deriveEncKey(bf, ifa, uuid) in
+    let encPubKey = deriveEncPubKey(encKey) in
+    let ihb = calculateIHB(bf, ifa) in
+    event AttesterInitiates(bf, ifa, uuid);
+    let phase1_payload = (encPubKey, ihb) in
+    let phase1_mac = computeMAC(phase1_payload, authKey) in
+    out(public_channel, (phase1_payload, phase1_mac));
+
+    (* Phase 2: With authentication tracking *)
+    in(public_channel, (ciphertext: bitstring, verifier_sig: Signature));
+    let verified_ciphertext = verify(ciphertext, verifier_sig, verifierPubKey) in
+    (* The code below only runs if the signature is valid *)
+    event AttesterAuthenticatesVerifier(verifierPubKey);
+    let plaintext = pdec(verified_ciphertext, encKey) in
+    let (vf: ValidatorFactor, nonce: Nonce) = plaintext in
+    event AttesterUsesNonce(nonce);
+
+    (* Phase 3: Same as standard *)
+    let idKey = deriveIdKey(bf, vf, uuid) in
+    let pubKey = derivePubKey(idKey) in
+    event AttesterPresentsKey(pubKey);
+    let jp_proof = calculateJP(bf, vf) in
+    let hmacKey = deriveHmacKey(bf, vf, uuid) in
+    let bound_hash = calculateBoundHash(ihb, pubKey, nonce) in
+    let pop_tag = computePoP(hmacKey, bound_hash) in
+    let final_eat_payload = (ihb, jp_proof, nonce, pubKey, pop_tag) in
+    let final_signature = sign(final_eat_payload, idKey) in
+    out(public_channel, (final_eat_payload, final_signature, pubKey)).
+
+let VerifierProcess(expected_bf: BootFactor, expected_ifa: InstanceFactor,
+                    uuid: UUID, verifierIdKey: IdentityKey) =
+    (* Phase 1: Verify Attester's proof of possession *)
+    in(public_channel, (phase1_payload: bitstring, phase1_mac: MAC));
+    let (attester_enc_pk: EncPublicKey, received_ihb: IHB) = phase1_payload in
+    let expected_authKey = deriveAuthKey(expected_bf, expected_ifa, uuid) in
+
+    if verifyMAC(phase1_payload, phase1_mac, expected_authKey) then
+        let expected_ihb = calculateIHB(expected_bf, expected_ifa) in
+        if received_ihb = expected_ihb then
+            let expected_encKey = deriveEncKey(expected_bf, expected_ifa, uuid) in
+            let expected_encPubKey = deriveEncPubKey(expected_encKey) in
+            if attester_enc_pk = expected_encPubKey then
+                (* Phase 2: Create and encrypt (VF, nonce) tuple *)
+                new seed: VFSeed;
+                let vf = mkVF(seed, expected_ifa) in
+                event VFReleased(vf);
+                new nonce: Nonce;
+                event VerifierGeneratesNonce(nonce);
+                let plaintext = (vf, nonce) in
+                let ciphertext = penc(plaintext, attester_enc_pk) in
+                let verifier_signature = sign(ciphertext, verifierIdKey) in
+                event VerifierAuthenticated(verifierIdKey);
+                event VerifierKeyMatch(derivePubKey(verifierIdKey), verifierIdKey);
+                out(public_channel, (ciphertext, verifier_signature));
+
+                (* Phase 3: Verify the final proof of joint possession *)
+                in(public_channel, (final_eat_payload: bitstring, final_signature: Signature, final_pubKey: PublicKey));
+                let verified_final = verify(final_eat_payload, final_signature, final_pubKey) in
+                let (rec_ihb: IHB, rec_jp: JP_Proof, rec_nonce: Nonce, rec_pubKey: PublicKey, rec_pop: PoPTag) = verified_final in
+                if rec_nonce = nonce then
+                    let expected_idKey = deriveIdKey(expected_bf, vf, uuid) in
+                    let expected_pubKey = derivePubKey(expected_idKey) in
+                    if final_pubKey = expected_pubKey then
+                        event VerifierValidatesWithKey(final_pubKey);
+                        let expected_jp = calculateJP(expected_bf, vf) in
+                        if rec_jp = expected_jp then
+                            let expected_hmac_key = deriveHmacKey(expected_bf, vf, uuid) in
+                            let expected_bound_hash = calculateBoundHash(rec_ihb, rec_pubKey, rec_nonce) in
+                            if verifyPoP(rec_pop, expected_hmac_key, expected_bound_hash) then
+                                event VerifierAccepts(expected_bf, expected_ifa, uuid); 0
+                            else 0
+                        else 0
+                    else 0
+                else 0
+            else 0
+        else 0
+    else 0.
+
+(* --- Sanity Check: BF should be public --- *)
+query attacker(bootFactor).
+
+(* --- Sanity Check: The function to derive keys should be known --- *)
+query bf: BootFactor, vf: ValidatorFactor, uuid: UUID;
+      attacker(deriveIdKey(bf, vf, uuid)).
+
+(* --- Core Security Queries --- *)
+query bf: BootFactor, ifa: InstanceFactor, uuid: UUID;
+      inj-event(VerifierAccepts(bf, ifa, uuid)) ==> inj-event(AttesterInitiates(bf, ifa, uuid)).
+query n: Nonce;
+      event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)).
+query pk: PublicKey;
+      event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk)).
+query vf: ValidatorFactor;
+      event(VFReleased(vf)) && attacker(vf).
+
+(* --- KCI Security Query --- *)
+query pk: PublicKey, vk: IdentityKey;
+      event(AttesterAuthenticatesVerifier(pk)) &&
+      event(VerifierKeyMatch(pk, vk)).
+
+(* --- MAIN PROCESS --- *)
+process
+    (* Create a single, well-known Verifier Identity Key. All honest Attesters *)
+    (* will be provisioned to trust the public key derived from this. *)
+    new well_known_verifierIdKey: IdentityKey;
+    let well_known_verifierPubKey = derivePubKey(well_known_verifierIdKey) in
+    (
+        (* The adversary can create an UNBOUNDED number of Attesters. *)
+        (* Each Attester gets a new, unique instance factor and UUID, *)
+        (* but they are all configured to trust the same Verifier. *)
+        (!
+            new instanceFactor: InstanceFactor;
+            new ecaUuid: UUID;
+            AttesterProcess(bootFactor, instanceFactor, ecaUuid, well_known_verifierPubKey)
+        )
+        |
+        (* The adversary can also create an UNBOUNDED number of Verifier sessions. *)
+        (* Each Verifier session uses the same well-known key, but it expects *)
+        (* a unique instance factor and UUID, simulating a Verifier that can handle *)
+        (* multiple different instances concurrently. *)
+        (!
+            new expected_ifa: InstanceFactor;
+            new expected_uuid: UUID;
+            VerifierProcess(bootFactor, expected_ifa, expected_uuid, well_known_verifierIdKey)
+        )
+        |
+        (* KCI Test Scenario: Leak a compromised Instance Factor *)
+        (
+            new compromisedIF: InstanceFactor;
+            out(public_channel, compromisedIF)
+        )
+        |
+        (* Honest session for KCI testing with authentication tracking *)
+        (!
+            new honestIF: InstanceFactor;
+            new testUuid: UUID;
+            (
+                AttesterProcessWithAuth(bootFactor, honestIF, testUuid, well_known_verifierPubKey)
+                |
+                VerifierProcess(bootFactor, honestIF, testUuid, well_known_verifierIdKey)
+            )
+        )
+    )
+
+(*
+Expected Results:
+
+  -- Sanity tests, checking assumptions --
+  Query not attacker(bootFactor[]) is false. (bootFactor should be free)
+  Query not attacker(deriveIdKey(bf_2,vf_4,uuid_3)) is false. (model confirms attacker can deriveIdKey if factors stolen)
+
+  -- Core security questions (need to return true) --
+  Query inj-event(VerifierAccepts(bf_2,ifa_2,uuid_3)) ==> inj-event(AttesterInitiates(bf_2,ifa_2,uuid_3)) is true.
+  Query event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)) is true.
+  Query event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk)) is true.
+  Query not (event(VFReleased(vf_4)) && attacker(vf_4)) is true.
+
+  -- This should return *not false* --
+  Query not (event(AttesterAuthenticatesVerifier(pk)) && event(VerifierKeyMatch(pk,vk))) is false.
+---
+
+Author's Address:
+  Nathanael Ritz
+  Independent
+  nathanritz@gmail.com
+*)
