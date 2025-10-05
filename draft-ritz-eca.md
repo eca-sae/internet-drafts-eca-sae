@@ -53,7 +53,7 @@ For re-attestation over (D)TLS, ECA leverages TLS Exported Authenticators [@?RFC
 To enable this in environments that lack a built-in hardware identity—such as bare-metal, multi-cloud, or edge deployments—ECA also defines a foundational **bootstrap ceremony**. This ceremony establishes a verifiable cryptographic identity from a "credential vacuum," bridging the gap for 
 workloads without a pre-existing trust anchor.
 
-Both ceremonies realize the Passport Model from the RATS Architecture, where an **Attester** obtains a portable, signed **Attestation Result** from a **Verifier** to present to **Relying Parties**.
+ECA is designed to realize the Passport Model from the RATS Architecture. In this model, an **Attester** engages in a ceremony with a **Verifier** to obtain a portable, signed **Attestation Result** (the "passport"). This passport, typically an **Entity Attestation Token (EAT)**, can then be presented to any number of **Relying Parties** (RPs) to make trust decisions.  In this specification, the workload server is the Attester, the Verifier provides the attestation service, and the consuming application or service (e.g., a KMS) is the Relying Party.
 
 > **Working with Existing Frameworks:** ECA design focus was to complement, not replace, existing identity and attestation frameworks. For detailed exploration of how ECA integrates with ACME, BRSKI, SPIFFE/SPIRE, and other systems, see [](https://www.google.com/search?q=%23integration-with-existing-frameworks).
 
