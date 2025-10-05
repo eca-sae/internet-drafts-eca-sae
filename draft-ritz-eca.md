@@ -1,9 +1,9 @@
 %%%
-title = "Ephemeral Compute Attestation (ECA) Protocol"
+title = "Entity and Compute Attestation (ECA)"
 abbrev = "ECA"
 category = "exp"
 docname = "draft-ritz-eca-01"
-date = "2025-09-30T00:00:00Z"
+date = "2025-10-04T00:00:00Z"
 ipr = "trust200902"
 area = "Security"
 pi = ["toc", "sortrefs", "symrefs", "strict"]
@@ -30,101 +30,189 @@ status = "experimental"
 
 .# Abstract
 
-This document specifies the Ephemeral Compute Attestation (ECA) protocol, a bootstrap attestation ceremony that enables ephemeral workloads to prove their identity without pre-shared operational credentials. As a foundational component for architectures like WIMSE (Workload Identity in Multi-Cloud Secure Environments), ECA uses a three-phase ceremony that cryptographically combines a publicly verifiable Boot Factor (a high-entropy provisioning value), an inherent and measurable Instance Factor, and a dynamically released Validator Factor to establish attestation evidence. The protocol is transport-agnostic and produces Entity Attestation Tokens (EAT) for consumption by Relying Parties.
+This document specifies Entity and Compute Attestation (ECA), a protocol for continuous attestation of high-assurance workloads such as Trusted Execution Environments (TEEs) using RATS architecture. ECA defines two ceremonies: a bootstrap ceremony to establish verifiable identity in credential-vacuum environments (bare-metal, sovereign clouds, edge), and a re-attestation ceremony enabling single round-trip verification over (D)TLS using TLS Exported Authenticators with the `cmw_attestation` extension. Both ceremonies are transport-agnostic and complement frameworks like WIMSE. Bootstrap security properties are formally analyzed using ProVerif (work-in-progress).
 
 {mainmatter}
 
 # Scope {#scope}
 
-ECA profiles the RATS [@!RFC9334] "passport model". It assumes familiarity with the roles defined in the RATS architecture. This document includes security considerations, implementation guidance, deployment patterns, and integration considerations for deploying ECA across diverse compute environments from cloud VMs to bare-metal systems.
+ECA profiles the RATS [@!RFC9334] architecture and defines reusable cryptographic ceremonies for attestation. It assumes familiarity with the vocabulary and concepts defined in the RATS architecture. 
 
-# Problem Statement and Motivation {#scope-problem-statement-and-motivation}
+The protocol's security properties regarding verifiable identity bootstrapping have been explored formally using ProVerif, with detailed analysis in [](#app-formal-modelling-informative) demonstrating resilience against network attackers and defining precise security boundaries under key compromise scenarios.
 
-Modern software architecture increasingly relies on ephemeral compute instances, which require a secure and reliable method to bootstrap their identity upon creation. While solutions exist for this problem, they are often tied to a specific vendor's ecosystem or lack the robustness required for certain environments. This creates significant challenges for portability, security, and operational consistency across diverse computing landscapes.
+# Problem Statement and Motivation
 
-## The Provider-Native Identity Dilemma {#the-provider-native-identity-dilemma}
+Secure remote workloads, especially long-running Trusted Execution Environments (TEEs), require more than just initial, point-in-time attestation; they need continuous verification to prove their ongoing trustworthiness. While this addresses the lifecycle of established identities, it creates an operational gap: how do we handle instances in environments that lack an initial, verifiable identity, such as bare-metal servers or multi-cloud VMs? This inconsistency creates significant challenges for portability and security. A complete solution must therefore address both the initial, verifiable bootstrapping of an identity from a credential vacuum and the continuous, stateful re-attestation of that identity throughout its lifecycle.
 
-Hyperscale cloud providers (e.g., AWS, GCP, Azure) offer Instance Metadata Services (IMDS) that can provide a cryptographically signed token attesting to an instance's identity. This is a mature model for applications developed to run within a single provider's environment. However, IMDS typically relies on HTTP-based access within the instance's network, which can introduce latency in high-throughput scenarios and requires instances to trust the provider's metadata endpoint.
+## ECA: A Unified Pattern for the Attestation Lifecycle
 
-## Limitations of the Current Landscape {#limitations-of-the-current-landscape}
+The **Entity and Compute Attestation (ECA)** protocol provides a unified pattern for the attestation lifecycle, centered on a lightweight **re-attestation ceremony**. This ceremony is designed for the continuous, stateful verification of high-assurance workloads like Trusted Execution Environments (TEEs), enabling a single round-trip health check over protocols like (D)TLS.
 
-Despite the success of provider-native solutions, their approach creates a new set of challenges in a world that is increasingly multi-cloud and security-conscious.
+For re-attestation over (D)TLS, ECA leverages TLS Exported Authenticators [@?RFC9261] with the `cmw_attestation` extension [@?I-D.fossati-tls-exported-attestation], which this specification co-develops to enable attestation credentials to be conveyed directly in the Certificate message during post-handshake authentication. This eliminates reliance on real-time certificate issuance from a Certificate Authority (CA), reducing handshake delays while ensuring attestation evidence remains cryptographically bound to the TLS session.
 
-### Vendor Lock-In and Portability {#vendor-lock-in-and-portability}
+To enable this in environments that lack a built-in hardware identity—such as bare-metal, multi-cloud, or edge deployments—ECA also defines a foundational **bootstrap ceremony**. This ceremony establishes a verifiable cryptographic identity from a "credential vacuum," bridging the gap for 
+workloads without a pre-existing trust anchor.
 
-Workloads are now frequently designed to be portable across different providers, but their identity bootstrapping mechanisms are not. An application architected to use the AWS Instance Identity Document cannot be moved to GCP, a private cloud, or a bare-metal server without significant re-engineering of its security and trust establishment logic. This friction couples a workload's identity to its location, undermining the core goal of portability.
+Both ceremonies realize the Passport Model from the RATS Architecture, where an **Attester** obtains a portable, signed **Attestation Result** from a **Verifier** to present to **Relying Parties**.
 
-### The Trust Gap in High-Assurance Environments {#the-trust-gap-in-high-assurance-environments}
+> **Working with Existing Frameworks:** ECA design focus was to complement, not replace, existing identity and attestation frameworks. For detailed exploration of how ECA integrates with ACME, BRSKI, SPIFFE/SPIRE, and other systems, see [](https://www.google.com/search?q=%23integration-with-existing-frameworks).
 
-Provider-native identity mechanisms fundamentally require that the cloud provider itself is a trusted entity. The identity token is issued by the provider's infrastructure and its validity rests on that trust. However, in Confidential Computing and other zero-trust scenarios, the threat model must include a potentially malicious or compromised provider. AMD SEV or Intel TDX, for instance, offer memory encryption and remote attestation, but their reports are tied to specific hardware generations, complicating migration across diverse fleets. In these cases, an identity token issued by the infrastructure is insufficient; trust must be anchored in a separate, verifiable source, such as a hardware root of trust (HRoT). TPM-based systems, such as those in TCG specifications, provide measured boot integrity but often require platform-specific endorsement keys, limiting interoperability in hybrid setups.
+-----
 
-### Inconsistency in "Alt-Cloud" and On-Premise Environments {#inconsistency-in-alt-cloud-and-on-premise-environments}
+## ECA Ceremonies
 
-For the vast ecosystem of smaller cloud providers, private clouds, and on-premise data centers, a standardized IMDS-like service does not exist. This forces operators into less secure or bespoke bootstrapping patterns, such as injecting pre-shared secrets via user-data. While a practical starting point, this approach re-introduces TOFU risks and creates a broad exposure surface for secrets in logs, state files, and metadata services, compounding operational complexity at scale. Traditional TOFU, as seen in SSH key exchanges, assumes initial connections are secure but can fail in automated deployments where instances are spun up frequently without human oversight. For example, in systems like Kubernetes or OpenStack, user-data injection requires careful configuration management to prevent accidental exposure during cluster scaling or migrations. For concrete patterns addressing these risks, see [](#instance-factor-patterns-ifp).
+ECA defines two related ceremonies that create a complete attestation lifecycle: a workload without a verifiable identity can be bootstrapped on Day 0 to obtain a signed EAT/AR and then use that credential for efficient re-attestation on Day N. Workloads already backed with verifiable identities like long running Trusted Execution Environments (TEEs) are ready for attested connections implicitly. 
 
-## ECA: An Alternative Approach {#eca-an-alternative-approach}
+~~~
+                                 +---------------------------+
+                                 |  Re-attestation Ceremony  |
+                                 |  (Warm Start Cycle)       |
+                                 +---------------------------+
+                                             ^
+              Input: prior credential (RF)   | 
+                     "Re-attestation Factor" |
+ +------------------>---------------------+-------+
+ | (Updated AR becomes RF for next cycle) |  RF   |
+ |                                        +-------+
+ ^                                            | Output: Updated AR/EAT
+ |                                            v
+ |                                        +----------+
+ |    [ Day N: Periodic Health-check ]    | Updated  |
+ +-------------------<--------------------| AR / EAT |
+                                          +----------+
+                                              ^
+                                              |
+                                              | Verifiable Credential
+                                              | (Enters the cycle)
+                                              |
+                                 +--------------------------+
+ [ Day 0: On-Ramp ]              |    Bootstrap Ceremony    |
+ (Lacks Verifiable Identity      |      (Cold Start)        |
+                                 +--------------------------+
+~~~
 
-The Ephemeral Compute Attestation (ECA) protocol is designed to address these limitations directly. It provides a single, open standard that:
+### Continuous Verification (Re-attestation Ceremony)
 
-- **Decouples Identity from Infrastructure:** ECA establishes instance identity through a transport-agnostic protocol, facilitating portability of workloads across environments.
+This single-phase ceremony enables ongoing verification for instances that already possess a credential from a prior attestation (the **Re-attestation Factor, or RF**).
 
-- **Supports Trust Anchoring:** ECA's design, allows trust to be anchored by a hardware root of trust (HRoT), providing cryptographic proof of identity that remains effective even if the underlying provider is untrusted.
+1.  **Attester presents** its existing credential (RF) along with fresh measurements (Instance Factor, IF).
+2.  **Verifier validates** the credential and appraises the new measurements against its policy.
 
-- **Provides a Standard for Various Environments:** ECA offers a standardized bootstrapping mechanism for on-premise, bare-metal, and "alt-cloud" deployments that lack a native identity service.
+Its primary use case is for periodic health checks of long-running TEE-based services, and it derives its security from the initial bootstrap ceremony and the secure transport.
 
-ECA approaches the bootstrapping problem as a cryptographic challenge based on verifiable proof of factor possession, independent of location. It provides a concrete solution to the "trust gap" identified in WIMSE's analysis of confidential computing and multi-cloud environments by establishing a portable, verifiable identity at boot-time. The resulting attestation evidence is designed for consumption by modern identity frameworks, enabling use cases such as satisfying ACME challenges for automated certificate issuance or serving as a high-assurance node attestor for SPIFFE/SPIRE.
+### Initial Identity Bootstrap (Bootstrap Ceremony)
 
-> **Working with Existing Frameworks:** ECA design focus was to complement, not replace, existing identity and attestation frameworks. For detailed exploration of how ECA integrates with ACME, BRSKI, SPIFFE/SPIRE, and other systems, see [](#integration-with-existing-frameworks).
+This three-phase ceremony establishes initial identity for instances starting without any credentials.
 
-# Conceptual Model (Non-Normative) {#conceptual-model}
+1.  **Attester proves possession** of a public **Binding Factor (BF)** and a measurable **Instance Factor (IF)**.
+2.  **Verifier validates this proof** and releases a secret challenge (**Validator Factor, VF**).
+3.  **Attester proves joint possession** of the factors to receive its initial credential.
 
-At a high level, the ECA protocol can be understood as a cryptographic dialogue where an instance proves its identity by demonstrating knowledge of three factors. Each factor serves a distinct purpose:
+Its primary use case is cold-start identity establishment, with security anchored in cryptographic proofs analyzed in the formal model.
 
-- **The Boot Factor (BF)** acts as a **public mission statement** for the attestation ceremony. It's a known, high-entropy value that scopes the attestation to a specific context, like a particular software build or deployment manifest.
+### Transport Agnosticism
 
-- **The Instance Factor (IF)** is the instance's **unique, unforgeable fingerprint**. It represents an inherent property of the instance, such as a measurement from a hardware root of trust, that can be verified but is never transmitted directly.
-
-- **The Validator Factor (VF)** is a **one-time password** from the Verifier. It is only released after the instance proves it has the correct "mission statement" (BF) and "fingerprint" (IF), ensuring the ceremony is fresh, interactive, and not a replay.
+ECA's security is derived from the cryptographic content of its exchanged artifacts, not the transport layer. Both ceremonies are transport-agnostic, with recommended patterns including TLS Exported Authenticators for interactive re-attestation and the pull-only Static Artifact Exchange (SAE) for bootstrapping in constrained networks.
 
 # Conventions and Definitions {#conventions-and-definitions}
 
 The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in BCP 14 [@!RFC2119] [@!RFC8174] when, and only when, they appear in all capitals, as shown here.
 
-**Boot Factor (BF):** A publicly verifiable, high-entropy value (≥128 bits) used to scope an attestation ceremony to a specific instance or context. The BF does not need to be kept secret; the protocol's security relies on its cryptographic binding to the Instance Factor, not its confidentiality. It can be sourced from any mechanism that provides a unique value to the instance. Non-exhaustive example include:
+**Binding Factor (BF):** A publicly verifiable, high-entropy value (≥128 bits) that cryptographically scopes an attestation ceremony to a specific context. The BF does not require confidentiality; protocol security relies on its binding to the Instance Factor, not secrecy. Context-specific semantics:
+
+- **Bootstrap:** Image digest, signed manifest, or SBOM reference
+- **Re-attestation:** Server's X.509 certificate public key
+
+The protocol's specific design allows BF to appear in logs or metadata services without compromising security. Non-exhaustive examples include:
 
 - An ACME account public key thumbprint published by an operator.
 - An orchestrator-published artifact like an image digest or signed manifest.
 - A version control tag combined with a signed Software Bill of Materials (SBOM) or other supply-chain attestation.
 
-**Instance Factor (IF):** An inherent, measurable property of the instance that is verifiable by the Verifier out-of-band. The IF's value is never transmitted over the public channel. Instead, the Attester proves its possession of, or state represented by, the IF through cryptographic means (e.g., a signature, quote, or attestation blob). The Verifier must be able to independently compute or obtain the expected IF value for appraisal. Examples include:
+**Instance Factor (IF):** An inherent, measurable property of the instance that is verifiable by the Verifier. The IF value itself is never transmitted directly; instead, the Attester proves possession through cryptographic means (e.g., signature, quote, attestation report).
 
-- **Hardware-Rooted:** A quote from a TPM/vTPM, an attestation report from a TEE (AMD SEV/Intel TDX), or a key derived within a secure enclave.
-- **Orchestrator-Provisioned:** A one-time, instance-unique secret delivered by a trusted orchestrator and potentially sealed to the platform's hardware, making its availability a measurable property.
-- **For Re-Attestation**: An existing identity key unique to the instance, or expected instance measurements such as runtime conditions, installed and running software, etc.
+**Ceremony Binding:** The IF MUST be bound to the ceremony identifier (e.g., the `eca_uuid` for ECA bootstrap) to ensure freshness and prevent replay.
 
-See [](#instance-factor-patterns-ifp) for additional examples and patterns using the `IF` value.
+Examples:
+- **Hardware-Rooted (Pattern A):** TPM quote, TEE attestation report against a CORiM [@?I-D.ietf-rats-corim]
+- **Orchestrator-Provisioned (Pattern B):** Instance-unique value (e.g., `vendor_uuid`)
+- **Artifact-Based (Pattern C):** Provisioned file content
+- **Session-Bound:** TEE quote with ceremony ID in REPORTDATA
 
-**Validator Factor (VF):** A confidential value generated and released by the Verifier only after successful initial authentication of `BF`+`IF` possession. **The VF MUST be bound to the IF** (e.g., `VF = SHA-256(seed || IF)`). This binding ensures `VF` secrecy against network attackers, as noted in the formal model (see [](#core-security-properties-baseline-model)).
+See [](#instance-factor-patterns-ifp) for additional examples and patterns.
 
-**Joint Possession:** The cryptographic property where security derives from proving knowledge of multiple factors (`BF`+`VF`) rather than secrecy of individual components.
+**Validator Factor (VF):** A confidential, ephemeral challenge generated and released by the Verifier used during **bootstrap ceremonies** after successful initial authentication of BF+IF possession. The VF MUST be bound to the IF (e.g., `VF = SHA-256(seed || IF)`) to ensure secrecy against network attackers.
 
-**Integrity Hash Beacon (IHB):** A SHA-256 binding of `BF` to `IF` that enables exposure-tolerant authentication while preventing pre-computation attacks.
+**Re-attestation Factor (RF):** A cryptographic credential proving identity continuity from a prior attestation ceremony. The RF enables simplified re-attestation without requiring a fresh interactive challenge.
 
-**Instance Factor Pattern (IFP):** The set of defined methods for sourcing the secret value for Instance Factor (`IF`). Three patterns are defined: hardware-rooted (Pattern A), orchestrator-provisioned (Pattern B), and artifact-based (Pattern C). For detailed specifications, see [](#instance-factor-patterns-ifp).
+Examples:
+- **EAT from bootstrap:** The signed token produced by an ECA bootstrap ceremony
+- **Signed IMDS token:** Vendor-provided instance identity document
+- **Session key:** Credential established during prior attestation
+- **X.509 certificate:** Cert issued based on prior attestation
+
+The Verifier validates RF out-of-band against expected identity before accepting re-attestation evidence.
+
+**Joint Possession:** The cryptographic property where security derives from proving knowledge of multiple factors (`BF`+`VF` for bootstrap, `BF`+`RF`+`IF` for re-attestation) rather than secrecy of individual components.
+
+**Integrity Hash Beacon (IHB):** A SHA-256 binding of `BF` to `IF` that enables exposure-tolerant authentication while preventing pre-computation attacks to mitigate MiTM threats.
+
+**Instance Factor Pattern (IFP):** The set of defined methods for sourcing the private value for Instance Factor (`IF`). Three patterns are defined: hardware-rooted (Pattern A), orchestrator-provisioned (Pattern B), and artifact-based (Pattern C). For detailed specifications, see [](#instance-factor-patterns-ifp).
 
 **Entity Attestation Token (EAT):** A standardized token format [@!RFC9711] used to convey attestation evidence in a cryptographically verifiable form.
 
-**Exchange Identifier (eca_uuid):** A unique identifier for each attestation lifecycle instance, used to construct artifact repository paths and prevent replay attacks.
+**Exchange Identifier (eca_uuid):** A unique identifier for each attestation lifecycle instance, used to construct artifact repository paths and prevent replay attacks in SAE-based deployments.
 
-**Artifact Repository:** A simple, addressable store (e.g., a web server, an object store) where peers can publish and retrieve cryptographic artifacts.
+**Artifact Repository:** A simple, addressable store (e.g., a web server, an object store) where peers can publish and retrieve cryptographic artifacts in SAE-based deployments.
 
 **Attestation Ceremony ("ceremony"):** The RATS architecture [@!RFC9334] refers to the exchange between participants as "attestation procedures." This document uses "Attestation Ceremony" (or "ceremony") synonymously to describe the complete, multi-phase sequence of cryptographic exchanges required for an attestation. The term "ceremony" is used conventionally throughout this specification.
+
+**Attester:** In the RATS (Remote Attestation Procedures) architecture, the Attester is the entity that engages in an "attestation ceremony" to prove its identity and integrity. In WIMSE (Workload Identity in Multi-Cloud Secure Environments), this role is mapped to the **Workload**, such as an ephemeral compute instance that requires an identity.
+
+* **Verifier:** The Verifier is the entity that appraises the evidence provided by the Attester. It enforces a series of validation gates and, upon successful appraisal, produces a signed Attestation Result (often an EAT, or Entity Attestation Token) that can be presented to other parties. Within a WIMSE architecture, this role is often fulfilled by an **Identity or Attestation Service**.
+
+* **Relying Party (RP):** A Relying Party is an entity that consumes the signed Attestation Result from a Verifier to make a trust or authorization decision about an Attester. The Relying Party is the ultimate consumer of the attestation "passport" and can be a service like a Key Management Service (KMS), API Gateway, or any other service that needs to verify the Attester before granting access or releasing credentials.
+
+# Conceptual Model (Non-Normative) {#conceptual-model}
+
+ECA defines two cryptographic ceremonies:
+
+## Bootstrap Ceremony (Cold Start) {#bootstrap-ceremony-cold-start}
+
+Establishes initial identity when no prior credential exists.
+
+**Ceremony Flow:** `(BF+IF) → VF → PoP(BF+VF) → AR`
+
+**Purpose:** Cryptographically prove possession of public context (BF) and measurable property (IF) to receive first credential.
+
+**Output:** Attestation Result (AR) with unique `eca_attester_id`
+
+See [](#protocol-overview) for detailed specification.
+
+## Re-attestation Ceremony (Warm Start) {#re-attestation-ceremony-warm-start}
+
+Verifies current state when credential from prior attestation exists.
+
+**Ceremony Flow:** `(BF+RF+IF) → AR` (single round-trip)
+
+**Purpose:** Present existing credential (RF) and prove current state (IF) to receive updated attestation.
+
+**Output:** Updated AR with refreshed measurements
+
+See [](#re-attestation-ceremony-specification) for detailed specification.
+
+## Key Distinction
+
+- **VF (Validator Factor)**: Bootstrap-specific interactive challenge
+- **RF (Re-attestation Factor)**: Re-attestation credential proving identity continuity
+
+Both ceremonies use the same cryptographic primitives and validation gates, but differ in their trust assumptions and round-trip requirements.
 
 # Instance Factor Patterns (IFP) {#instance-factor-patterns-ifp}
 
 ECA supports full integration with hardware roots of trust (HRoT) where available, and such integration is RECOMMENDED. ECA does not replace the need for HRoTs where the threat model must assume a compromised service provider, hypervisor or related platform risks.
 
-The choice of IFP pattern determines the source of the Instance Factor (IF) and the strength of the resulting security guarantee. The security of the ECA protocol's initial phase depends on the Attester cryptographically proving the property represented by the `IF`, which is bound to the public Boot Factor (BF).
+The choice of IFP pattern determines the source of the Instance Factor (IF) and the strength of the resulting security guarantee. The security of the ECA protocol's initial phase depends on the Attester cryptographically proving the property represented by the `IF`, which is bound to the public Binding Factor (BF).
 
 The three defined patterns are:
 
@@ -132,15 +220,15 @@ The three defined patterns are:
 
 **IFP Pattern B (Orchestrator-Provisioned):** The `IF` is a one-time, instance-unique value delivered by a trusted orchestrator through a secure channel. The Verifier knows the expected value based on its provisioning request. This protects against network attackers but assumes the infrastructure provider is trusted.
 
-* **IFP Pattern C (Artifact-Based):**  The `IF` is the full content of a provisioned artifact (e.g., an `authorized_keys` file) that also contains the BF. The Verifier can reconstruct the expected IF because it generated the original artifact. This pattern addresses TOFU vulnerabilities in constrained environments. For security considerations with this pattern, see [](#impersonation-risk).
+**IFP Pattern C (Artifact-Based):**  The `IF` is the full content of a provisioned artifact (e.g., an `authorized_keys` file) that also contains the BF. The Verifier can reconstruct the expected IF because it generated the original artifact. This pattern addresses TOFU vulnerabilities in constrained environments. For security considerations with this pattern, see [](#impersonation-risk).
 
-In the case of re-attestation using ECA, see [](#stateful-re-attestation-for-long-running-instances).
+In the case of re-attestation using ECA, the IF typically represents current platform state (e.g., fresh TEE measurements) rather than initial provisioning state. See [](#re-attestation-ceremony-specification).
 
 ## Minimal Deployment and Trust Chain Sketch (Pattern C) {#minimal-deployment-and-trust-chain-sketch-pattern-c}
 
 This section illustrates how ECA can be used even at a small, human-driven scale—such as by an individual developer—to provide cryptographic assurance for ephemeral instances without requiring complex infrastructure or hardware roots of trust, using `IFP Pattern C`. 
 
-In this sketch, the Instance Factor (IF) is an artifact-based secret such as the full content of an injected file containing the Boot Factor (BF). Mapped to RATS architecture roles, the laptop is the `Verifier`, the VM is the `Attester` and the individual developer acts effectively as the `Relying Party` (RP).
+In this sketch, the Instance Factor (IF) is an artifact-based value such as the full content of an injected file containing the Binding Factor (BF). Mapped to RATS architecture roles, the laptop is the `Verifier`, the VM is the `Attester` and the individual developer acts effectively as the `Relying Party` (RP).
 
 1. Developer trusts their local ECA toolchain CLI for `BF` generation
 2. Developer trusts Service Provider to correctly inject `BF`/`SSH public key`
@@ -153,24 +241,22 @@ In this sketch, the Instance Factor (IF) is an artifact-based secret such as the
 
 # Core Design Principles {#core-design-principles}
 
-**Publicly Sourced Boot Factor:** The protocol is designed to use a Boot Factor (BF) that can be public information. Its security does not depend on the BF's confidentiality. This architectural choice reduces the operational burden of protecting bootstrap material and allows for flexible provisioning, such as using the digest of a public software manifest as the `BF`. Security is anchored entirely on the cryptographic proof that binds this public `BF` to the non-transmitted, measurable Instance Factor (IF).
+**Publicly Sourced Binding Factor:** The protocol is designed to use a Binding Factor (BF) that can be public information. Its security does not depend on the BF's confidentiality. This architectural choice reduces the operational burden of protecting bootstrap material and allows for flexible provisioning, such as using the digest of a public software manifest as the `BF`. Security is anchored entirely on the cryptographic proof that binds this public `BF` to the non-transmitted, measurable Instance Factor (IF).
 
 **Deterministic Identity:** All cryptographic keys are derived deterministically from high-entropy factors, ensuring repeatable identity generation without dependence on potentially weak runtime entropy sources.
 
 **Transport Agnostic:** The protocol's security is derived from the cryptographic content of exchanged artifacts, not the properties of the transport layer. This allows flexible deployment over any simple retrieval mechanism.
 
-**Relationship to Static Artifact Exchange (SAE):** While ECA is a transport-agnostic protocol, the Static Artifact Exchange (SAE) [@I-D.ritz-sae] is the recommended transport mechanism. SAE's static, pull-only model is intentionally minimal to reduce the overall attack surface. This approach reducing common attack surfaces like injection and parser vulnerabilities. By relying on SAE, it re-inforces ECA's proof-driven design that relies solely from the cryptographic content of the exchanged artifacts to achieve its security goals, while mitigating risks particularly regarding freshness guarantees (see [](#verifier-key-compromise)).
+**Relationship to Static Artifact Exchange (SAE):** While ECA is a transport-agnostic protocol, the Static Artifact Exchange (SAE) [@I-D.ritz-sae] is the recommended transport mechanism for bootstrap ceremonies. SAE's static, pull-only model is intentionally minimal to reduce the overall attack surface. This approach reduces common attack surfaces like injection and parser vulnerabilities. By relying on SAE, it reinforces ECA's proof-driven design that relies solely on the cryptographic content of the exchanged artifacts to achieve its security goals, while mitigating risks particularly regarding freshness guarantees (see [](#verifier-key-compromise-impact-analysis)).
 
-**Privileged Credential Vacuum:** The Attester begins its lifecycle with no privileged operational credentials (e.g., API keys, service tokens, or passwords). This operationalizes a "verify-then-trust" model, ensuring that trust is never assumed but must be cryptographically proven through successful attestation. Operational credentials are only delivered after a Relying Party (RP) appraises the Attestation Result (AR) from the Verifier and deems it acceptable. For post-attestation patterns including re-attestation and hierarchical trust, see [](#post-attestation-patterns).
-
-## Protocol Requirements (Normative) {#protocol-requirements-normative}
+# Protocol Requirements (Normative) {#protocol-requirements-normative}
 
 This section defines abstract properties that MUST hold for any conforming implementation. Concrete algorithms and encodings are defined by profiles (see [](#sec-profiles)).
 
 1. **Accept-Once Ceremony**
 
-   - Each attestation ceremony is identified by a globally unique `eca_uuid`.
-   - A Verifier MUST accept each `eca_uuid` at most once and MUST treat re-observations as replay and abort. Verifiers SHOULD use a persistent store (e.g., a database or file) to track accepted `eca_uuid` values for at least the expected lifetime of an Attestation Result to prevent replay.
+   - Each attestation ceremony is identified by a globally unique identifier (e.g., `eca_uuid` for SAE, `certificate_request_context` for (D)TLS).
+   - A Verifier MUST accept each ceremony identifier at most once and MUST treat re-observations as replay and abort. Verifiers SHOULD use a persistent store (e.g., a database or file) to track accepted ceremony identifiers for at least the expected lifetime of an Attestation Result to prevent replay.
 
 2. **Dual-Channel Binding**
 
@@ -188,7 +274,7 @@ This section defines abstract properties that MUST hold for any conforming imple
 4. **Authenticated Artifacts**
 
    - Each phase artifact that influences appraisal MUST be integrity-protected under a key bound to ceremony inputs defined by the active profile.
-   - Integrity protection MUST cover at minimum: `eca_uuid`, channel role (Attester/Verifier), and a profile-defined set of claims sufficient for appraisal.
+   - Integrity protection MUST cover at minimum: ceremony identifier, channel role (Attester/Verifier), and a profile-defined set of claims sufficient for appraisal.
 
 5. **Replay & Freshness**
 
@@ -198,7 +284,7 @@ This section defines abstract properties that MUST hold for any conforming imple
 6. **Termination & State**
 
    - The Verifier MUST publish a terminal status (success or authenticated failure).
-   - After terminalization, subsequent artifacts for the same `eca_uuid` MUST be ignored.
+   - After terminalization, subsequent artifacts for the same ceremony identifier MUST be ignored.
 
 7. **No Attester-Supplied Trust Pinning**
 
@@ -208,20 +294,24 @@ This section defines abstract properties that MUST hold for any conforming imple
 
 8. **Transport Minimalism**
 
-   - The protocol MUST be realizable over a static artifact repository (poll/pull). Profiles MAY specify additional transports but MUST NOT weaken the requirements above.
+   - The protocol MUST be realizable over a static artifact repository (poll/pull) or via (D)TLS Exported Authenticators. Profiles MAY specify additional transports but MUST NOT weaken the requirements above.
 
 # Protocol Overview {#protocol-overview}
 
-The ECA protocol follows a three-phase ceremony, as illustrated in the figure below. The ceremony begins with the Attester in a privileged credential vacuum, possessing only its initial factors. It concludes with the Verifier producing a signed Attestation Result (AR) upon successful validation, which can then be delivered to the Attester for presentation to Relying Parties (RP).
+This section specifies the **bootstrap ceremony** in detail. For re-attestation ceremony specification, see [](#re-attestation-ceremony-specification).
+
+The bootstrap ceremony is the security-critical foundation of ECA. All formal security analysis ([](#app-formal-modelling-informative)) applies to this ceremony type. Re-attestation builds upon bootstrap security by assuming a valid initial credential.
+
+The ECA protocol follows a three-phase ceremony for bootstrap attestation, as illustrated in the figure below. The ceremony begins with the Attester in a privileged credential vacuum, possessing only its initial factors. It concludes with the Verifier producing a signed Attestation Result (AR) upon successful validation, which can then be delivered to the Attester for presentation to Relying Parties (RP).
 
 ~~~
  BF (public): ACME acct pubkey, signed image manifest, SBOM, etc.
- IF (secret): TPM/vTPM/SEV/TDX quote, enclave key, one-time secret.
+ IF (private): TPM/vTPM/SEV/TDX quote, enclave key.
 
   Attester                             Verifier
      |                                     |
-     |  Evidence: prove BF (public) + IF (secret)     [ECA]
-     |====================================>|        [CEREMONY]
+     |  Evidence: prove BF (public) + IF (private)     [ECA]
+     |====================================>|        [BOOTSTRAP]
      |                                     |    (Verifier issues VF
      |                                     |     only after BF+IF)
      |<------------------------------------| VF
@@ -238,13 +328,13 @@ The ECA protocol follows a three-phase ceremony, as illustrated in the figure be
 
 The Verifier enforces a sequence of fail-closed validation gates in a specific order derived from the protocol's formal model. Each gate represents a critical check that must pass before proceeding.
 
-### Phase 1 Appraisal Gates
+### Phase 1 Appraisal Gates (Bootstrap)
 
 1.  **MAC Verification:** Verifies the integrity of the Phase-1 payload using an HMAC tag derived from `BF` and `IF`.
 
        - Failure Action: Immediate termination. Publish error status `MAC_INVALID`.
 
-2.  **Instance Authorization:** Checks if the Attester's identity (e.g., derived from `eca_uuid` or IF) is authorized to proceed.
+2.  **Instance Authorization:** Checks if the Attester's identity (e.g., derived from ceremony identifier or IF) is authorized to proceed.
 
        - Failure Action: Immediate termination. Publish error status `ID_MISMATCH`.
 
@@ -256,7 +346,7 @@ The Verifier enforces a sequence of fail-closed validation gates in a specific o
 
        - Failure Action: Immediate termination. Publish error status `KEM_MISMATCH`.
 
-### Phase 3 Appraisal Gates
+### Phase 3 Appraisal Gates (Bootstrap)
 
 5.  **Evidence Time Window:** Validates that the `iat`, `nbf`, and `exp` claims in the final EAT are within an acceptable time skew (e.g., ±60 seconds).
 
@@ -282,31 +372,30 @@ The Verifier enforces a sequence of fail-closed validation gates in a specific o
 
        - Failure Action: Immediate termination. Publish error status `POP_INVALID`.
 
-11. **Identity Uniqueness (Replay):** Persists the terminal state for the `eca_uuid` and rejects any future attempts to use it.
+11. **Identity Uniqueness (Replay):** Persists the terminal state for the ceremony identifier and rejects any future attempts to use it.
 
        - Failure Action: Immediate termination. Publish error status `IDENTITY_REUSE`.
-
 
 These gates align with the formal model's events (see [](#core-security-properties-baseline-model)):
 - Gate 8 Nonce Match (per AttesterUsesNonce event).
 - Gate 9 JP Validation (per VerifierValidatesWithKey event).
 - Gate 10 PoP Validation (See [](#sec-pop)) (per VerifierAccepts event).
 
-## Phase 1: Authenticated Channel Setup {#phase-1-authenticated-channel-setup}
+## Phase 1: Authenticated Channel Setup (Bootstrap) {#phase-1-authenticated-channel-setup}
 
 - **Attester** generates an ephemeral X25519 keypair deterministically from `BF` + `IF`.
 - Computes the Integrity Hash Beacon (IHB): `IHB = SHA-256(BF || IF)`.
 - Publishes a CBOR payload containing `{kem_pub, ihb}` and an associated HMAC tag to the repository.
 - **Verifier** retrieves the published artifacts and validates them against Gates 1-4.
 
-## Phase 2: Challenge and Validator Factor Release {#phase-2-challenge-and-validator-factor-release}
+## Phase 2: Challenge and Validator Factor Release (Bootstrap) {#phase-2-challenge-and-validator-factor-release}
 
 - **Verifier** generates a fresh `VF` (≥128 bits) and a 16-byte nonce.
 - Encrypts `{VF, nonce}` using HPKE to the Attester's ephemeral public key.
 - Signs the encrypted payload with its Ed25519 key and publishes it to the repository.
 - **Attester** retrieves the published payload, verifies its authenticity, and decrypts the `VF`.
 
-## Phase 3: Joint Possession Proof {#phase-3-joint-possession-proof}
+## Phase 3: Joint Possession Proof (Bootstrap) {#phase-3-joint-possession-proof}
 
 - **Attester** derives a final Ed25519 signing keypair deterministically from `BF`+`VF`.
 - Creates a signed EAT containing identity claims, the Verifier's nonce, and a final Proof-of-Possession HMAC.
@@ -318,6 +407,10 @@ These gates align with the formal model's events (see [](#core-security-properti
 When using SAE transport [@I-D.ritz-sae]:
 - Implementations MAY use long-term or ephemeral Verifier keys
 - Ephemeral per-ceremony keys are RECOMMENDED for operational best practice
+
+When using (D)TLS transport:
+- Implementations MAY use long-term or ephemeral Verifier keys
+- For re-attestation, Client typically validates the Re-attestation Factor (RF) directly without separate Verifier involvement
 
 When using other transports:
 - Implementations MUST use ephemeral per-ceremony Verifier keys (see [](#with-direct-communication-transports) for rationale)
@@ -345,6 +438,110 @@ When using other transports:
 | `VALIDATING` | Appraisal results pass. | `SUCCESS` |
 | Any | Any validation check fails or timeout. | `FAIL` |
 
+# Re-attestation Ceremony Specification {#re-attestation-ceremony-specification}
+
+This section specifies the re-attestation ceremony for instances with existing credentials from prior attestation.
+
+## Prerequisites {#re-attestation-prerequisites}
+
+- Instance possesses Re-attestation Factor (RF): A credential from prior ECA bootstrap or re-attestation
+- Verifier has record of expected identity associated with RF
+- Binding Factor (BF) remains stable or is updated according to policy
+
+## Generic Re-attestation Pattern {#generic-re-attestation-pattern}
+
+### Single-Phase Exchange
+
+**Attester actions:**
+1. Collect current Instance Factor (IF): Fresh measurements, quotes, or state indicators
+2. Construct Evidence payload: `{BF, RF, IF, ceremony_id, timestamp}`
+3. Sign Evidence with key from Re-attestation Factor (RF)
+4. Publish signed Evidence to Verifier
+
+**Verifier actions:**
+1. Retrieve Evidence payload
+2. Validate RF signature against known credential
+3. Verify RF subject matches expected identity for BF
+4. Appraise IF measurements against policy
+5. Confirm ceremony_id uniqueness (replay protection)
+6. Emit updated Attestation Result (AR)
+
+### Validation Gates {#re-attestation-validation-gates}
+
+1. **RF Signature Verification**: Validates credential authenticity
+   - Failure: `CREDENTIAL_INVALID`
+
+2. **Identity Continuity**: Confirms RF subject matches expected identity
+   - Failure: `IDENTITY_MISMATCH`
+
+3. **Measurement Appraisal**: Verifies IF against policy (e.g., CoRIM)
+   - Failure: `MEASUREMENT_REJECTED`
+
+4. **Freshness Binding**: Ensures ceremony_id is unique and properly bound
+   - Failure: `REPLAY_DETECTED` or `BINDING_INVALID`
+
+5. **Timestamp Validation**: Confirms Evidence timestamp within acceptable window
+   - Failure: `TIME_EXPIRED`
+
+## Transport-Specific Implementations {#re-attestation-transport-specific}
+
+The generic pattern above can be realized over different transports:
+
+### Session-Bound (D)TLS Pattern
+
+When using TLS Exported Authenticators [@?RFC9261]:
+
+- **BF**: Server's X.509 certificate public key
+- **RF**: Prior EAT from bootstrap
+- **IF**: Fresh TEE Quote with ceremony_id in REPORTDATA
+- **ceremony_id**: `certificate_request_context` from CertificateRequest
+
+**Freshness**: Cryptographic binding of Quote to session context ensures per-connection freshness.
+
+**Security**: TLS 1.3 forward secrecy + RF validation + Quote appraisal
+
+See [](#concrete-example-continuous-tee-attestation-over-dtls) for complete example.
+
+### Repository-Based SAE Pattern
+
+When using Static Artifact Exchange [@?I-D.ritz-sae]:
+
+- **BF**: Deployment manifest hash, image digest, or stable identifier
+- **RF**: Prior EAT from bootstrap ceremony
+- **IF**: Current measurements, runtime hashes, or provisioned secrets
+- **ceremony_id**: `eca_uuid` (new unique identifier for this re-attestation)
+
+**Freshness**: Accept-once semantics for `eca_uuid`
+
+**Security**: RF signature + repository access control + cryptographic binding
+
+Repository structure:
+```
+/<eca_uuid>/evidence.eat
+/<eca_uuid>/evidence.sig
+/<eca_uuid>/result.ar
+/<eca_uuid>/status
+```
+
+### Custom Transport Pattern
+
+Implementations using other transports MUST ensure:
+- RF signature verification
+- Ceremony identifier uniqueness (replay protection)
+- IF freshness (e.g., timestamps, nonces, or context binding)
+- Integrity protection of Evidence payload
+
+## Security Properties {#re-attestation-security-properties}
+
+Re-attestation security derives from:
+
+1. **Bootstrap foundation**: Initial credential established via cryptographically verified bootstrap acts as Re-attestation Factor (RF)
+2. **Transport security**: Channel properties (e.g., TLS 1.3 forward secrecy)
+3. **Continuous appraisal**: Fresh IF measurements validated against policy
+4. **Replay protection**: Ceremony identifier uniqueness enforcement
+
+**Note**: Unlike bootstrap ceremonies, re-attestation does NOT protect against initial identity forgery. If an attacker compromises the bootstrap ceremony, they can obtain a valid `RF` and perform subsequent re-attestations. Therefore, bootstrap ceremony security (including hardware-rooted IF for zero-trust scenarios) remains critical for overall system security.
+
 # Post-Attestation Patterns {#post-attestation-patterns}
 
 Once the ceremony has concluded, operators can make policy decisions about how to handle the Attestation Result (AR). This may include transmitting the `AR` directly to the successful Attester so that it may present the `AR` to Relying Parties (RPs) who trust the Verifier's signature. The full scope and mechanism of presenting and accepting `AR`s to `RP`s is outside the scope of this document.
@@ -363,24 +560,118 @@ Once the ceremony has concluded, operators can make policy decisions about how t
 ~~~
     Figure 2: Relying Party Consumption of Attestation Result
 
+## Credential Lifecycle {#credential-lifecycle}
+
+Once a bootstrap ceremony concludes successfully, the Attester possesses a signed Attestation Result (AR) that serves as its renewable credential. This credential enables simplified re-attestation workflows.
+
+**Typical Lifecycle:**
+
+1. **Bootstrap (SAE):** Instance performs full BF+IF→VF→PoP ceremony, receives initial EAT with `eca_attester_id`
+
+2. **Transition:** Instance establishes (D)TLS connection to service, presenting EAT as client certificate or authentication token
+
+3. **Re-attestation ((D)TLS):** Service periodically challenges instance using BF+RF+IF pattern to verify current state
+
+4. **Renewal:** Before credential expiration, instance performs re-attestation to receive updated AR with extended validity
+
+**Key insight:** The `eca_attester_id` from bootstrap becomes the stable identity, while re-attestation updates only the state/measurement claims.
 
 ## Stateful Re-Attestation for Long-Running Instances {#stateful-re-attestation-for-long-running-instances}
 
-The ECA protocol is primarily designed for the initial identity bootstrap of ephemeral compute instances. However, long-running workloads may require a mechanism for renewing their operational credentials. A credential renewal can be modeled as a "re-attestation" ceremony.
+Long-running workloads require periodic verification throughout their operational lifetime. Re-attestation ceremonies provide this capability without requiring full bootstrap interaction.
 
-In this model, the original, stable `eca_attester_id` identity may serve as a Renewal Factor (`RF`), analogous to the `BF`. The new Instance Factor (`IF`) may be a manifest of "known good" measurements of the instance's current state (e.g., hashes of critical binaries or configuration files). It is reasonable that an instance may have a set of unique credentials or shared-secrets provisioned after the initial bootstrap and attestation was successful. Including such secret values as part of the expected `IF` value can provide additional assurances. This turns the renewal into a periodic health and integrity check, ensuring the instance remains in a known-good state throughout its lifecycle. A future profile of ECA may define a renewal protocol based on stateful re-attestation.
+### High-Assurance Re-attestation (TEE) {#high-assurance-re-attestation-tee}
+
+For confidential computing environments requiring hardware-backed guarantees:
+
+**Prerequisites:**
+- Instance runs in TEE with Quote capability
+- Prior bootstrap established identity
+- TEE measurements policy defined in CoRIM
+
+**Ceremony:**
+
+~~~
+Client                    Server (TEE)
+  |                          |
+  | CertificateRequest       |
+  | {context}                |
+  |------------------------->|
+  |                          | Generate:
+  |                          |  Quote ← TEE.attest(
+  |                          |    REPORTDATA=hash(context)
+  |                          |  )
+  |                          |
+  | EAT{                     |
+  |   RF: signed_AR,         |
+  |   IF: Quote,             |
+  |   nonce: context         |
+  | }                        |
+  |<-------------------------|
+  |                          |
+  | Verify:                  |
+  |  - Quote signature       |
+  |  - REPORTDATA binding    |
+  |  - Measurements vs CoRIM |
+  |  - RF continuity         |
+~~~
+
+**Benefits:**
+- Hardware-rooted proof of current state
+- Cryptographic binding to session (context)
+- Standard RATS interoperability (CoRIM, CMW, AR4SI)
+- Protection against platform compromise
+
+**See [](#concrete-example-continuous-tee-attestation-over-dtls) for complete integration example.**
+
+## Relying Party Integration {#relying-party-integration}
+
+Relying Parties (RPs) consume Attestation Results to make authorization decisions:
+
+~~~
+Attester                Verifier                RP (KMS, Service)
+  |                        |                         |
+  |==== Ceremony =========>|                         |
+  |<------- AR ------------|                         |
+  |                                                  |
+  |--------------- AR + Request -------------------->|
+  |                                             Evaluate:
+  |                                             - AR signature
+  |                                             - Claims vs policy
+  |                                             - Freshness
+  |                                                   |
+  |<-------------- Response (if policy OK) -----------|
+~~~
+
+**Policy examples:**
+- KMS: "Release encryption key only if measurements match golden values"
+- API Gateway: "Allow access only if TEE firmware version ≥ X"
+- Scheduler: "Place workload only on nodes with valid attestation < 5min old"
+
+Full scope of AR presentation and RP appraisal is outside this specification.
 
 ## Chaining and Hierarchical Trust {#chaining-and-hierarchical-trust}
 
-The ECA protocol is inherently composable, enabling the creation of multi-layer trust architectures that can propagate trust from hardware up through layers of software. This is achieved by using the signed Attestation Result (AR) from one ceremony as a cryptographic input—specifically, the Instance Factor (IF)—for a subsequent ceremony.
+ECA ceremonies can chain to propagate trust across layers:
 
-A straightforward deployment pattern for this is represented by the following "bare-metal-to-VM" attestation chain:
+**Pattern:** Use signed AR from one ceremony as RF for next ceremony
 
-1. **Initial Attestation (Hardware Layer):** A physical host (`Attester i`) performs an ECA ceremony using an **Instance Factor** derived from a hardware root of trust (e.g., a TPM quote, per `IFP Pattern A`). It attests to a low-level Verifier (`Verifier i`) that is trusted to appraise hardware integrity. The successful result is a signed Attestation Result, `AR_i`.
+**Example (Bare-metal → VM):**
 
-2. **Second-Level Attestation (VM Layer):** A virtual machine (`Attester ii`) is instantiated on the host. Its provisioned **Instance Factor** is the signed `AR_i` from the hardware layer. `Attester ii` performs its own ECA ceremony with a higher-level cloud orchestrator (`Verifier ii`). To validate, `Verifier ii` first cryptographically verifies `AR_i` (confirming it trusts `Verifier i`), and if valid, proceeds with the rest of the ECA ceremony.
+1. Physical host performs bootstrap with TPM-based IF (Pattern A)
+   - Output: `AR_host` proving hardware integrity
 
-The final result, `AR_ii`, is a portable credential that cryptographically proves a healthy VM is running on a specific, healthy, and previously attested physical host. The same pattern can be used to bridge trust domains, for example by consuming an `SVID` from an existing `SPIFFE/SPIRE` infrastructure as the Instance Factor for an attester in a separate cloud environment. A future profile of ECA may define a specific profile for chaining and hierarchical trust.
+2. VM on that host performs re-attestation
+   - **RF:** `AR_host` (proves running on attested hardware)
+   - **IF:** VM-specific measurements
+   - Output: `AR_vm` proving "healthy VM on healthy host"
+
+**Use cases:**
+- Nested virtualization trust chains
+- Container-on-VM attestation
+- Cross-domain trust federation
+
+Future ECA profiles may standardize chaining metadata and validation rules.
 
 ## Risks and Mitigations for Composable Deployments {#risks-and-mitigations-for-composable-deployments}
 
@@ -390,23 +681,132 @@ While ECA is designed to be composable (e.g., chaining attestations), realizing 
 
 **Organizational Friction:** In multi-team environments, clear ownership of the end-to-end attestation process is critical. Without a shared governance model, configuration drift between what DevOps provisions, what Security expects, and what the application implements can lead to systemic failures.
 
+# Transport Considerations {#transport-considerations}
+
+The ECA protocol is transport-agnostic. Both bootstrap and re-attestation ceremonies can be deployed over any mechanism that supports:
+
+1. Artifact exchange (publishing and retrieving cryptographic payloads)
+2. Freshness guarantees (ceremony identifiers, nonces, or timestamps)
+3. Immutability (artifacts cannot be modified after publication)
+
+This section provides non-normative guidance on transport selection based on operational requirements.
+
+## Bootstrap Ceremony Transports {#bootstrap-transports}
+
+### SAE - Recommended for Constrained Environments
+
+**Static Artifact Exchange (SAE)** [@I-D.ritz-sae] is RECOMMENDED for bootstrap ceremonies in:
+
+- Environments without direct network connectivity
+- Zero-trust networks with deny-all ingress/egress
+- Bare-metal or alt-cloud deployments
+- Air-gapped scenarios
+
+**Characteristics**:
+- Pull-only communication (no listening endpoints required)
+- Repository-based artifact exchange
+- Minimal attack surface (no parser vulnerabilities at transport layer)
+
+**Security properties**: See [](#with-sae-transport-pull-only-model) for analysis of Verifier key compromise impact when using SAE.
+
+### Other Bootstrap Transports
+
+Implementations MAY use alternative transports for bootstrap:
+
+- **Direct HTTP/HTTPS**: If both parties have stable endpoints
+- **Message queues**: For asynchronous cloud environments
+- **Custom protocols**: As required by specific deployment constraints
+
+When using non-SAE transports, implementations MUST use ephemeral per-ceremony Verifier keys (see [](#with-direct-communication-transports)).
+
+## Re-attestation Ceremony Transports {#re-attestation-transports}
+
+### Session-Bound - Recommended for Interactive Services
+
+**TLS 1.3 Exported Authenticators** [@?RFC9261] with the `cmw_attestation` extension ([@?I-D.fossati-tls-exported-attestation]) are RECOMMENDED for re-attestation in:
+
+- Long-running TEE-based services
+- Interactive client-server architectures
+- Scenarios requiring per-connection freshness
+
+**Characteristics**:
+- Single round-trip re-attestation
+- Cryptographic binding to TLS session context
+- Forward secrecy from TLS 1.3 ECDHE
+
+**Security properties**: TLS channel security + RF validation provides continuous verification without separate Verifier involvement.
+
+### Repository-Based Re-attestation
+
+Implementations MAY use SAE or similar repository-based transports for re-attestation when:
+
+- TLS connectivity is unavailable
+- Asynchronous verification is required
+- Existing SAE infrastructure can be reused
+
+**Pattern**: Simplified single-phase exchange (RF + current IF) with ceremony identifier for freshness.
+
+### Other Re-attestation Transports
+
+Any transport meeting the core requirements (artifact exchange, freshness, immutability) is acceptable. Examples:
+
+- **gRPC streams**: For high-frequency health checks
+- **WebSockets**: For browser-based attestation
+- **Custom protocols**: For embedded or IoT scenarios
+
+## Transport Selection Guidance {#transport-selection-guidance}
+
+| Scenario | Bootstrap | Re-attestation |
+|----------|-----------|----------------|
+| **Zero-trust cloud** | SAE | (D)TLS |
+| **Bare-metal** | SAE | SAE or (D)TLS |
+| **TEE services** | SAE or (D)TLS | (D)TLS |
+| **Air-gapped** | SAE | SAE |
+| **Embedded/IoT** | Custom | Custom |
+
+**Note**: These are recommendations, not requirements. Operators should select transports based on their specific security requirements, network topology, and operational constraints.
+
 # Security Considerations {#security-considerations}
+
+This section addresses security properties and considerations for ECA ceremonies.
+
+## Security Analysis Scope {#security-analysis-scope}
+
+The formal security analysis presented in this document (see [](#app-formal-modelling-informative)) and the cryptographic security properties verified apply specifically to the **bootstrap ceremony** in zero-trust scenarios. The bootstrap ceremony assumes no prior relationship between Attester and Verifier and must establish initial trust through cryptographic proof of factor possession.
+
+Re-attestation ceremonies, which assume an existing credential from prior attestation, operate under different threat models and are not covered by the formal verification presented here. Security properties of re-attestation depend on:
+
+- The security of the initial bootstrap ceremony
+- The integrity of the Re-attestation Factor (RF) credential
+- Transport-specific security properties (e.g., TLS 1.3 channel security for session-bound re-attestation)
+
+Future work may extend formal analysis to re-attestation scenarios.
+
+## Bootstrap Ceremony Security {#bootstrap-ceremony-security}
 
 **Trust Boundaries:** Without hardware roots of trust, the security scope is limited to passive network observers rather than compromised infrastructure providers. Hardware-rooted Instance Factor Pattern A addresses this limitation. For detailed pattern specifications, see [](#instance-factor-patterns-ifp). This hardware-based protection is critical for mitigating State Reveal attacks; a formal analysis confirmed that a compromise of the Attester's software environment can expose the ephemeral decryption keys used in Phase 2, thereby compromising the ceremony's core secrets (see [](#attester-state-reveal)).
 
-**Exposure tolerance:** The protocol is designed to tolerate incidental exposure of the unique per-use Boot Factor token (BF) (e.g., in control-plane logs), however this tolerance does not replace the need for sound operational hygiene. Operators SHOULD avoid unnecessary public dissemination of `BF` to minimize attracting targeted attacks. Security is layered; cryptographic strength complements, but does not replace, good operational practices.
-
 **Secrets Handling:** Derived keys are sensitive cryptographic material. Implementations MUST handle them securely in memory (e.g., using locked memory pages) and explicitly zeroize them after use.
+
+## Re-attestation Ceremony Security {#re-attestation-ceremony-security}
+
+Re-attestation security depends on:
+
+1. **Initial Bootstrap Integrity**: If bootstrap is compromised, all subsequent re-attestations are invalid
+2. **RF Protection**: The Re-attestation Factor credential must be protected against theft or forgery
+3. **Transport Security**: Session-bound re-attestations depend on (D)TLS channel security; repository-based re-attestations depend on access control
+
+**Key limitation**: Re-attestation CANNOT detect if initial identity was forged during bootstrap. Operators deploying re-attestation MUST ensure bootstrap ceremonies use appropriate Instance Factor Patterns (Pattern A for zero-trust environments).
 
 ## Exposure Tolerance {#exposure-tolerance}
 
-A core design principle of this protocol is that the Boot Factor (BF) **can be public information without compromising security**. Its value may be derived from public sources (e.g., an image digest) or appear in logs and metadata services.
+A core design principle of this protocol is that the Binding Factor (BF) **can be public information without compromising security** during identity bootstrapping. Its value may be derived from public sources (e.g., an image digest) or appear in logs and metadata services.
 
-This design places the entire security burden for the initial authentication on the proof of possession of the Instance Factor (IF). The protocol's security is anchored on the Attester demonstrating knowledge of the measurable `IF` in conjunction with the public `BF`. Operational risk is therefore focused on the integrity of the measurement process and the out-of-band verification channel for the `IF`, not on protecting the `BF`'s confidentiality. The "`accept-once`" policy for each `eca_uuid` ensures that even if an adversary could forge a valid proof for a given `IF`, it would be useless for replaying a completed ceremony.
+This design places the entire security burden for the initial authentication on the proof of possession of the Instance Factor (IF). The protocol's security is anchored on the Attester demonstrating knowledge of the measurable `IF` in conjunction with the public `BF`. Operational risk is therefore focused on the integrity of the measurement process and the out-of-band verification channel for the `IF`, not on protecting the `BF`'s confidentiality. The "`accept-once`" policy for each ceremony identifier ensures that even if an adversary could forge a valid proof for a given `IF`, it would be useless for replaying a completed ceremony.
 
 The operational risk is therefore focused on preventing the concurrent exposure of both `BF` and `IF`. This risk is tightly time-bounded by two key factors:
 
-1. **The Accept-Once Policy:** The window of vulnerability is extremely short. Once a Verifier consumes an `eca_uuid` and successfully completes the ceremony, the "accept-once" rule renders any stolen factors for that specific ceremony useless for future impersonation attacks.
+1. **The Accept-Once Policy:** The window of vulnerability is extremely short. Once a Verifier consumes a ceremony identifier and successfully completes the ceremony, the "accept-once" rule renders any stolen factors for that specific ceremony useless for future impersonation attacks.
 
 2. **Transport Security (SAE):** When using a transport like SAE, an attacker cannot mount a meaningful impersonation attack without gaining write access to the secure artifact repository, which represents a significant and independent security boundary.
 
@@ -414,11 +814,11 @@ Therefore, operational hygiene should focus on protecting the end-to-end provisi
 
 ## Security Properties (Formal Model) {#security-properties-formal-model}
 
-The protocol's security properties have been analyzed using an exploratory ProVerif model. The model positively identifies key security goals such as authentication, freshness, key binding, and confidentiality against a network attacker, assuming a public Boot Factor (BF). For a detailed summary of the formal model, its queries, and the proven properties within the models, see [](#appendix-a-formal-modelling-informative).
+The protocol's security properties have been analyzed using an exploratory ProVerif model. The model positively identifies key security goals such as authentication, freshness, key binding, and confidentiality against a network attacker, assuming a public Binding Factor (BF). For a detailed summary of the formal model, its queries, and the proven properties within the models, see [](#app-formal-modelling-informative).
 
 ## Impersonation Risk {#impersonation-risk}
 
-The security properties described in [](#security-properties-formal-model) depend on an adversary being unable to generate a valid cryptographic proof for an Instance Factor (IF) that they do not legitimately possess. An impersonation attack would require an adversary to forge a proof (e.g., a TPM quote or a signature) corresponding to a known `IF` for a specific ceremony's Boot Factor (BF). The protocol's primary defense is that the `IF` itself is never transmitted, only a proof derived from it. Therefore, operational controls MUST protect the integrity of the measurement source (e.g., the vTPM) and the out-of-band channel through which the Verifier learns the expected measurement.
+The security properties described in [](#security-properties-formal-model) depend on an adversary being unable to generate a valid cryptographic proof for an Instance Factor (IF) that they do not legitimately possess. An impersonation attack would require an adversary to forge a proof (e.g., a TPM quote or a signature) corresponding to a known `IF` for a specific ceremony's Binding Factor (BF). The protocol's primary defense is that the `IF` itself is never transmitted, only a proof derived from it. Therefore, operational controls MUST protect the integrity of the measurement source (e.g., the vTPM) and the out-of-band channel through which the Verifier learns the expected measurement.
 
 To reduce this risk, operators SHOULD minimize the time window between when an Attester becomes operational with its `BF` and when a Verifier is available to appraise the Attester's evidence.
 
@@ -442,21 +842,50 @@ This result establishes the protocol's security boundary regarding the Attester'
 
 ## Verifier Key Compromise Impact Analysis {#verifier-key-compromise-impact-analysis}
 
-Formal analysis ([](#verifier-key-compromise)) identified that long-term Verifier keys enable freshness attacks in theory. However, the protocol's cryptographic binding design **ensures** these attacks cannot produce valid authentication, limiting impact to denial of service at worst.
+The security impact of Verifier signing key compromise depends on ceremony type and transport characteristics.
 
-When using SAE transport [@I-D.ritz-sae], compromise of Verifier signing keys has negligible security impact:
+### Bootstrap Ceremonies {#bootstrap-ceremonies}
 
-- **Authentication remains secure:** Attackers cannot forge acceptable evidence
-- **Protocol integrity maintained:** All validation gates (8-10) will reject evidence derived from attacker-injected values
-- **Maximum impact:** Denial of service only
+**Threat:** Attacker with compromised Verifier signing key attempts to impersonate Verifier during bootstrap.
 
-This resilience results from two factors:
-1. SAE's pull-only architecture prevents message injection without repository access
-2. ECA's cryptographic binding ensures evidence from corrupted ceremonies fails appraisal
+**Impact:** The formal model ([](#verifier-key-compromise)) demonstrates that cryptographic binding limits impact to denial of service:
 
-Given these mitigations, implementations using SAE MAY use long-term Verifier keys with acceptable security properties, though ephemeral keys remain RECOMMENDED for operational hygiene and ceremony isolation.
+- Attacker could inject Phase 2 messages with forged VF
+- However, resulting Evidence will fail validation:
+  - Wrong VF derivation → fails Gate 9 (JP Validation)
+  - Wrong PoP calculation → fails Gate 10 (PoP Validation)
+  - Wrong ceremony context → fails Gate 8 (Nonce Match)
 
-Note: Implementations using push-capable or direct-communication transports MUST use ephemeral per-ceremony keys, as these transports enable active injection attacks that compromise freshness.
+**Maximum impact:** Ceremony termination without credential issuance (DoS)
+
+**Mitigation:** The protocol's cryptographic binding ensures corrupted ceremonies produce invalid Evidence that legitimate Verifiers will reject.
+
+### Re-attestation Ceremonies {#re-attestation-ceremonies}
+
+**Session-Bound ((D)TLS):**
+
+When using (D)TLS transport, re-attestation security derives from:
+
+1. **TLS 1.3 channel security:** ECDHE provides forward secrecy
+2. **RF validation:** Client verifies RF signature against known credential
+3. **Context binding:** e.g., TEE Quote binds `certificate_request_context`
+4. **Cryptographic gates:** Same validation logic as bootstrap
+
+**Impact of compromised keys:** None for re-attestation, as Client validates RF directly without Verifier involvement in the critical path.
+
+**Repository-Based (SAE):**
+
+When using SAE for re-attestation:
+- Repository access control provides ceremony isolation
+- Attacker cannot inject artifacts without write access
+- Corrupted Evidence fails cryptographic validation at legitimate Verifiers
+
+**Normative guidance:**
+- Long-term Verifier keys are ACCEPTABLE for all deployments
+- Ephemeral per-ceremony keys remain RECOMMENDED for operational hygiene
+- Security derives from cryptographic binding, not key ephemerality
+
+See [](#verifier-key-compromise) for formal analysis details.
 
 ### With SAE Transport (Pull-Only Model) {#with-sae-transport-pull-only-model}
 
@@ -504,14 +933,14 @@ ECA explicitly does not attempt to address several related but distinct problems
 
 **Manufacturer Provenance:** ECA does not provide supply-chain attestation or manufacturer-anchored trust. ECA handles runtime attestation for transient instances at the software layer.
 
-**Real-time Performance Optimization:** The asynchronous design prioritizes security and reliability over minimal latency. Preliminary efforts suggest total latency of less than 2 seconds using SAE for VM attestation, which is minimal compared to standard cloud VM startup time. Sub-second attestation is not a primary goal, however feedback for secure optimizations are welcomed.
+**Real-time Performance Optimization:** Sub-second attestation is not a design goal. The reference implementation achieves ~1.3s protocol execution, which is acceptable for ephemeral compute bootstrap scenarios where typical VM startup times are 10-30 seconds.
 
 # Integration with Existing Frameworks {#integration-with-existing-frameworks}
 
-The ECA protocol is designed to complement, not replace, existing identity and attestation systems. It acts as a foundational "attestation engine" that fills specific gaps in cross-domain portability and high-assurance bootstrapping for ephemeral workloads. Its role is to provide a verifiable, portable proof of identity that can be consumed by a wide range of higher-level identity frameworks and certificate issuance protocols, as illustrated below.
+The ECA protocol is designed to complement, not replace, existing identity and attestation systems. It acts as a foundational "attestation engine" that fills specific gaps in cross-domain portability and high-assurance bootstrapping for both ephemeral and long-running workloads. Its role is to provide a verifiable, portable proof of identity that can be consumed by a wide range of higher-level identity frameworks and certificate issuance protocols, as illustrated below.
 
 ~~~
-┌─────────────────┐  ┌──────────────────   ┌──────────────────┐
+┌─────────────────┐  ┌──────────────────┐   ┌──────────────────┐
 │   Ephemeral     │  │   Identity &     │  │   Certificate    │
 │   Compute       │  │   Access         │  │   Authority      │
 │   Environment   │  │   Management     │  │   Ecosystems     │
@@ -531,10 +960,21 @@ The ECA protocol is designed to complement, not replace, existing identity and a
 ~~~
     Figure 3: Integration with Existing Frameworks
 
+## SEAL Working Group Alignment {#seal-working-group-alignment}
 
-## Realizing the RATS Passport Model {#realizing-the-rats-passport-model}
+This specification's **re-attestation ceremony** directly implements the SEAL WG charter requirements for attested (D)TLS:
 
-ECA aligns with the Passport Model of the RATS Architecture [@!RFC9334], where the Attester obtains a portable Attestation Result (e.g., an EAT [@!RFC9711]) from the Verifier for presentation to Relying Parties. While RATS provides the roles and terminology for remote attestation, it does not specify a concrete protocol for cross-cloud identity bootstrapping. ECA fills this gap by defining a phased exchange that produces standardized EATs bound to joint ephemeral factors, enabling interoperability across heterogeneous providers.
+| SEAL Requirement | How ECA Satisfies |
+|------------------|-------------------|
+| **Per-connection freshness** | `certificate_request_context` bound into TEE Quote |
+| **Leverage (D)TLS 1.3** | Via RFC 9261 Exported Authenticators |
+| **Leverage RATS formats** | CMW, CoRIM, AR4SI, EAT |
+| **No core (D)TLS modifications** | Only `cmw_attestation` extension |
+| **Mutual attestation support** | Symmetric client/server ceremonies |
+
+The `cmw_attestation` extension from [@?I-D.fossati-tls-exported-attestation] serves as the transport mechanism for ECA **re-attestation ceremonies** over (D)TLS.
+
+**Note**: ECA bootstrap ceremonies are typically performed over SAE before establishing (D)TLS connections. Once an instance has its initial credential, it can then use the re-attestation ceremony over (D)TLS for continuous verification.
 
 ## ECA + ACME-RATS {#eca--acme-rats}
 
@@ -542,7 +982,7 @@ A powerful use case for ECA is as a mechanism to satisfy the attestation challen
 
 When you combine ECA with the ACME-RATS framework, you create a complete, end-to-end automated flow.
 
-This integration approach enables a powerful vision: just as ACME enabled the automation of web server certificates and brought about ubiquitous HTTPS, the combination of ACME-RATS and ECA can enable the automated issuance of high-assurance identities to ephemeral workloads, realizing a "Let's Encrypt" for Machines."
+This integration approach enables a powerful vision: just as ACME enabled the automation of web server certificates and brought about ubiquitous HTTPS, the combination of ACME-RATS and ECA can enable the automated issuance of high-assurance identities to ephemeral workloads, realizing a "Let's Encrypt for Machines."
 
 ### Conceptual Integration {#conceptual-integration}
 
@@ -562,7 +1002,6 @@ An integration of an ACME client with an ECA Attester would follow this sequence
   Binding example: image_digest -> cert SAN URI (per CA policy).
 ~~~
     Figure 4: ECA Integration with ACME-RATS
-
 
 1. **ACME Challenge:** The ACME client (running on the ephemeral instance) requests a certificate and receives an `attestation-result-01` challenge from the ACME server. This challenge includes a server-provided `token` (acting as a nonce for freshness) and optional `claimsHint` (e.g., required claims like `FIPS_mode` or `OS_patch_level`).
 
@@ -603,11 +1042,23 @@ This section provides a conceptual, speculative composition where an ECA ceremon
 * **Verifier** publishes a stable identifier (e.g., `key id`) discoverable by the ACME Server (e.g., via directory or config).
 * **Freshness/Nonce Binding:** ACME `token` is bound to ECA `vnonce` (e.g., `vnonce = token` or `vnonce = SHA-256(token || eca_uuid)`), included in Evidence EAT, and reflected in AR. ACME Server checks match at validation.
 
-## ECA in a WIMSE Architecture
+## ECA in a WIMSE Architecture {#eca-in-a-wimse-architecture}
 
-The ECA protocol is designed to serve as a foundational "bootstrap attestation ceremony" within a broader Workload Identity in Multi-Cloud Secure Environments (WIMSE) architecture. It directly addresses WIMSE's zero-touch bootstrap principles by operating in a "privileged credential vacuum," allowing a workload to cryptographically prove its identity before receiving any runtime credentials.
+In WIMSE (Workload Identity in Multi-Cloud Secure Environments) deployments, ECA provides both bootstrap and continuous attestation:
 
-### Role Mapping
+**Deployment pattern:**
+1. **Bootstrap:** Instance performs ECA/SAE ceremony, obtains initial EAT
+2. **Transition:** Establishes (D)TLS to WIMSE identity service
+3. **Re-attestation:** Periodic health checks using BF+RF+IF pattern
+4. **Token exchange:** Presents validated EAT to receive WIMSE tokens (OAuth, SVID, etc.)
+
+**Benefits:**
+- Zero-touch provisioning in TEE environments
+- Continuous attestation for long-lived workloads
+- Trust domain bridging via AR chaining
+- Hardware-backed identity for zero-trust architectures
+
+### Role Mapping {#role-mapping}
 
 When integrating ECA into a WIMSE-compliant system, the roles map as follows:
 
@@ -617,22 +1068,22 @@ When integrating ECA into a WIMSE-compliant system, the roles map as follows:
 | **Verifier** | **Identity or Attestation Service** | The entity within the trust domain that validates the workload's claims. |
 | **Relying Party** | **Service Consumer or Authorization Service** | An entity that consumes the Attestation Result to make an authorization decision. |
 
-### Workflow Integration
+### Workflow Integration {#workflow-integration}
 
 ECA's primary function in a WIMSE workflow is to produce the initial, high-assurance credential.
 
 1.  A **Workload** (Attester) executes the ECA ceremony upon boot.
-2.  The **Attestation Service** (Verifier) validates the claims and issues a signed EAT.
-3.  This EAT serves as a secure, short-lived **initial workload credential**.
-4.  The Workload can then exchange this EAT with a WIMSE **Identity Service** to obtain longer-lived runtime credentials (e.g., SVIDs, OAuth tokens) for interacting with other services.
+2.  The **Attestation Service** (Verifier) validates the claims and issues an Attestation Result (AR).
+3.  This AR serves as a secure, short-lived **initial workload credential**.
+4.  The Workload can then exchange this AR with a WIMSE **Identity Service** to obtain longer-lived runtime credentials (e.g., SVIDs, OAuth tokens) for interacting with other services.
 
-### WIMSE Terminology Alignment
+### WIMSE Terminology Alignment {#wimse-terminology-alignment}
 
 To align with WIMSE concepts, ECA's components can be framed as follows:
 
 -   **Trust Domain**: The security boundary defined by the Verifier's trust anchors and policies.
--   **Attestation Scope Token / Provisioning Context**: The public **Boot Factor (BF)**, which scopes the attestation ceremony to a specific provisioning event.
--   **Workload Identity Roots**: The secret **Instance Factor (IF)** patterns, which anchor the workload's identity in hardware (Pattern A), an orchestrator (Pattern B), or an artifact (Pattern C).
+-   **Attestation Scope Token / Provisioning Context**: The public **Binding Factor (BF)**, which scopes the attestation ceremony to a specific provisioning event.
+-   **Workload Identity Roots**: The private **Instance Factor (IF)** patterns, which anchor the workload's identity in hardware (Pattern A), an orchestrator (Pattern B), or an artifact (Pattern C).
 
 ## The SPIFFE/SPIRE Framework {#the-spiffespire-framework}
 
@@ -690,7 +1141,7 @@ Complementary deployment patterns:
 
 ## BRSKI (Bootstrapping Remote Secure Key Infrastructure) {#brski-bootstrapping-remote-secure-key-infrastructure}
 
-BRSKI [@!RFC8995] solves *manufacturer-anchored onboarding* for physical devices that ship with an IEEE 802.1AR IDevID and a manufacturer voucher service (MASA). ECA targets *ephemeral compute* (VMs, containers) that typically lack such an identity.
+BRSKI [@?RFC8995] solves *manufacturer-anchored onboarding* for physical devices that ship with an IEEE 802.1AR IDevID and a manufacturer voucher service (MASA). ECA targets *ephemeral compute* (VMs, containers) that typically lack such an identity.
 
 The mechanisms are complementary: **BRSKI** is for day-0 hardware onboarding based on supply-chain provenance, while ECA is for just-in-time software and instance attestation at runtime. An operator could use BRSKI to securely enroll a physical device into their network, and then use ECA as a subsequent, continuous attestation check to validate the software state running on that device before releasing application-level privileges.
 
@@ -703,68 +1154,7 @@ Adopting ECA as a foundational attestation engine provides several key benefits:
 * **Composable:** Can be layered with existing systems like SPIFFE/SPIRE to enhance their security posture.
 * **High-Assurance:** Supports hardware roots of trust (`IFP Pattern A`) for zero-trust environments.
 * **Automation-Friendly:** Designed from the ground up for ephemeral, dynamic, and automated infrastructures.
-
-# Profiles (Normative) {#sec-profiles}
-
-This document defines the protocol abstractly. Concrete cryptographic mechanisms are supplied by profiles. A conforming implementation MUST implement at least one profile, and any chosen profile MUST preserve all requirements in [](#protocol-requirements-normative).
-
-> Note: No MTI Algorithms in this Revision. This -00 revision does not define mandatory-to-implement (MTI) primitives. Reference profiles will be published separately to enable experimentation and interoperability testing.
-
-Key Separation (Architecture requirement): Regardless of profile, implementations MUST maintain strict separation between:
-- Phase 2 encryption keys (used by the Verifier to release VF to the Attester), and
-- Phase 3 identity/signing keys (used by the Attester to sign Evidence/EAT).
-
-Profiles typically achieve separation via domain-separated KDF invocations; however, any mechanism that guarantees computational unlinkability between Phase 2 and Phase 3 key material is acceptable, provided the invariants in [](#protocol-requirements-normative) remain intact.
-
-## Proof-of-Possession (PoP) Construction {#sec-pop}
-
-A profile MUST provide a PoP mechanism that proves joint-possession of both factors used across the ceremony and binds the result to the session context. At minimum, the PoP's authenticated input MUST cover:
-
-- `eca_uuid`,
-- the Integrity Hash Beacon (IHB) or an equivalent `BF`+`IF` binding,
-- the Attester's Phase-3 signing public key, and
-- the Verifier's freshness input (e.g., `vnonce`).
-
-The PoP output MUST be verifiable by the Verifier without additional round trips and MUST be integrity-protected under a key that is infeasible to compute without both factors required by the active profile.
-
-# EAT profiles {#sec-evidence-profiles}
-
-## Evidence Claims {#evidence-claims}
-
-| Claim | EAT Key | Value Type | M/O | Description |
-| :----------------- | :------ | :--------- | :-: | :----------------------------------------------------------------------------------------------------------------------- |
-| **ECA UUID** | 2 (sub) | tstr | M | The unique `eca_uuid` for the attestation lifecycle. The value of this claim MUST be the `eca_uuid`. |
-| **Expiration** | 4 (exp) | int | M | NumericDate (epoch seconds). MUST be encoded as a 64-bit unsigned integer. |
-| **Not Before** | 5 (nbf) | int | M | NumericDate (epoch seconds). MUST be encoded as a 64-bit unsigned integer. |
-| **Issued At** | 6 (iat) | int | M | NumericDate (epoch seconds). MUST be encoded as a 64-bit unsigned integer. |
-| **Verifier Nonce** | 10 (nonce) | tstr | M | Verifier-issued `vnonce` (**base64url**, unpadded) representing exactly 16 bytes of entropy (typically 22 chars). |
-| **ECA Identity** | 256 (EUID) | tstr | M | `eca_attester_id` = hex SHA-256 of the Ed25519 public key used to sign this EAT. |
-| **EAT Profile** | 265 | tstr | M | Profile identifier (e.g., `urn:ietf:params:eat:profile:eca-v1`). |
-| **Measurements** | 273 | tstr | M | Integrity Hash Beacon (IHB) (**lowercase hex**). |
-| **PoP** | 274 (PoP) | tstr | M | Final Proof of Possession tag (**base64url**, unpadded) computed as defined by the active profile. |
-| **Intended Use** | 275 | tstr | M | The intended use of the EAT (e.g., attestation, enrollment credential binding). |
-| **JP Proof** | 276 | tstr | M | Joint Possession proof (**lowercase hex**), binding the final identity to the ceremony. |
-
-Values marked "tstr" that carry binary material (e.g., nonces, tags) MUST specify their encoding. Profile specifications MUST define exact encodings for all binary claims.
-
-## Attestation Results {#attestation-results}
-
-| Claim | Key | Value Type | Description |
-| :--------------- | :------ | :--------- | :--------------------------------------------------------------------------------- |
-| **Issuer** | 1 | tstr | An identifier for the Verifier that produced the result. |
-| **Subject** | 2 | tstr | The `eca_attester_id` identity of the instance that was successfully attested. |
-| **Expiration** | 4 (exp) | int | OPTIONAL. NumericDate defining the AR's validity period. |
-| **Not Before** | 5 (nbf) | int | OPTIONAL. NumericDate defining the AR's validity period. |
-| **Issued At** | 6 | int | NumericDate (epoch seconds) of the successful validation. |
-| **JWT ID** | 7 | tstr | The unique `eca_uuid` of the attestation lifecycle to prevent replay. |
-| **Key ID** | -1 (kid)| bstr | OPTIONAL. The hash of the Verifier's public key used to sign the AR. |
-| **Status** | -262148 | tstr | The outcome of the attestation. MUST be `urn:ietf:params:rats:status:success`. |
-
-For failures, the AR payload SHOULD follow the same structure but with a `status` of `urn:ietf:params:rats:status:failure` and an additional `error_code` claim (e.g., -262149 as a `tstr`) containing the authenticated error. Relying Parties consuming the AR MUST validate the `nbf` and `exp` claims to ensure the AR is within its validity period.
-
-# Transport Considerations {#transport-considerations}
-
-The ECA protocol is transport-agnostic. It requires only that peers have a mechanism to publish and retrieve immutable cryptographic artifacts from a pre-defined Artifact Repository. The Static Artifact Exchange (SAE) protocol [@I-D.ritz-sae] is specified as the recommended pattern to fulfill this requirement. SAE's static, "publish-then-poll" model is intentionally chosen to minimize the attack surface associated with traditional, dynamic APIs. By avoiding direct request processing, it eliminates entire classes of vulnerabilities like injection and parser flaws, ensuring that protocol security is derived from the cryptographic content of the artifacts alone.
+* **Continuous Verification:** Supports both initial bootstrap and ongoing re-attestation throughout workload lifecycle.
 
 # Operational Considerations {#operational-considerations}
 
@@ -772,7 +1162,7 @@ The ECA protocol is transport-agnostic. It requires only that peers have a mecha
 
 **Time Synchronization:** Reasonably synchronized time is REQUIRED for proper validation of the `nbf` and `exp` time windows (Gate 5 skew tolerance: ±60s). The use of a time synchronization protocol like NTP [@?RFC5905] is RECOMMENDED. Polling MUST use exponential backoff with jitter.
 
-**Addressing Complexity:** The multi-phase design of ECA is intentionally confined to the infrastructure layer to provide a simple and secure operational experience. ECA's cryptographic machinery is expected to be abstracted away from the end-user. The prototype implementation demonstrates this, executing a complete, parallel attestation with a single command (e.g. `eca-toolchain attest --manifest ./manifest.yml`), similar to how a sophisticated suite of standards (SMTP, DKIM, etc.) underpins a simple email "send" button.
+**Addressing Complexity:** The multi-phase design of ECA is intentionally confined to the infrastructure layer to provide a simple and secure operational experience. ECA's cryptographic machinery is expected to be abstracted away from the end-user. The prototype implementation demonstrates this, executing a complete, parallel attestation with a single command (e.g., `eca-toolchain attest --manifest ./manifest.yml`), similar to how a sophisticated suite of standards (SMTP, DKIM, etc.) underpins a simple email "send" button.
 
 ## Provisioning and Repository Access {#provisioning-and-repository-access}
 
@@ -780,46 +1170,35 @@ The ECA protocol requires the Attester to publish artifacts while adhering to th
 
 # IANA Considerations {#iana-considerations}
 
-IANA is requested to register:
-
-## EAT Profile {#sec-iana-eat-profile}
-
-* **Profile:** Profile identifiers will be defined by concrete profile specifications.
-
-* **ECA Attestation Result Claims:** IANA is requested to establish a registry for ECA Attestation Result Claims as outlined in [](#attestation-results). This registry defines the claims used within the signed CBOR object that constitutes an Attestation Result.
-
-## Registries {#sec-iana-registries}
-
-### ECA Error Codes Registry {#sec-iana-errors}
-
-This registry defines application-specific error codes that are used in addition to the base error codes defined in [@I-D.ritz-sae]. The Canonical Content string defined here MUST be used as the input to the HMAC-SHA256 function when generating an error signal, as specified by the SAE protocol.
-
-| Code | Canonical Content (UTF-8) | Gate | Description |
-| :-------------------- | :------------------------ | :--- | :--------------------------------------------------------------------------- |
-| `MAC_INVALID` | `MAC_INVALID` | 1 | Provided MAC was invalid. |
-| `ID_MISMATCH` | `ID_MISMATCH` | 2 | Provided instance identity was invalid. |
-| `IHB_MISMATCH` | `IHB_MISMATCH` | 3 | Recomputed IHB did not match expected value. |
-| `KEM_MISMATCH` | `KEM_MISMATCH` | 4 | Did not get expected KEM key for the session. |
-| `TIME_EXPIRED` | `TIME_EXPIRED` | 5 | Evidence timestamp was outside valid time window. |
-| `SCHEMA_ERROR` | `SCHEMA_ERROR` | 6 | Attestation token failed schema validation. |
-| `SIG_INVALID` | `SIG_INVALID` | 7 | Attestation token signature failed. |
-| `NONCE_MISMATCH` | `NONCE_MISMATCH` | 8 | Nonce in the EAT did not match the issued nonce. |
-| `KEY_BINDING_INVALID` | `KEY_BINDING_INVALID` | 9 | The key used for validation is not bound to the session's Boot Factor. |
-| `POP_INVALID` | `POP_INVALID` | 10 | The PoP tag was invalid. |
-| `IDENTITY_REUSE` | `IDENTITY_REUSE` | 11 | Attempt to reassign an existing identity. |
-| `PUBLISHER_INVALID` | `PUBLISHER_INVALID` | - | Attester artifacts were observed at a repository not hosted by the Attester. |
-| `TIMEOUT_PHASE1` | `TIMEOUT_PHASE1` | - | Attester failed to publish Phase 1 artifacts within timeout |
-| `TIMEOUT_PHASE2` | `TIMEOUT_PHASE2` | - | Attester failed to publish Phase 2 artifacts within timeout |
-| `TRANSPORT_ERROR` | `TRANSPORT_ERROR` | - | Underlying transport protocol error |
+TODO IANA
 
 # Implementation Status {#implementation-status}
 
-A working prototype demonstrates end-to-end attestation including:
+An end-to-end happy-path implementation of the bootstrap profile is publicly available at [[ECA-SAE-PROTOTYPE](#ext-links)], demonstrating complete identity bootstrap functionality including:
 
-- Complete three-phase protocol implementation
-- EAT-compliant evidence generation
-- Concurrent execution capability
-- Docker-based orchestration for testing
+**Protocol Coverage:**
+- Three-phase attestation ceremony with all validation gates
+- HPKE-based VF delivery with AAD binding  
+- COSE_Sign1 Evidence generation and verification
+- Replay protection via persistent UUID tracking
+- SAE transport with pull-only artifact exchange
+
+**Performance (Docker-based deployment):**
+- Protocol execution: 1.3s (Phase 1-3)
+- Total attestation: ~6s (including container startup)
+- Parallel sessions: 3+ concurrent attestations validated
+
+**Security Features:**
+- Fixed-size padding (2048 bytes) for side-channel mitigation
+- Domain-separated HKDF key derivation
+- Constant-time cryptographic comparisons
+- HMAC-authenticated error codes
+
+**Deployment Model:**
+- Docker Compose orchestration
+- Isolated attester/verifier containers
+- Mock S3 for artifact repository
+- Comprehensive error classification
 
 | Metric | Value | Notes |
 |--------|-------|-------|
@@ -827,13 +1206,15 @@ A working prototype demonstrates end-to-end attestation including:
 | Full Attestation (incl. containers) | ~6s | Parallel runs, randomized mode |
 | Scalability | 3 concurrent | No failures observed |
 
-An end-to-end happy-path version of the Prototype is available at [[ECA-SAE-PROTOTYPE](#ext-links)].
-
-Reference profile specifications and test vectors are maintained separately to enable independent updates and experimentation.
-
 # Acknowledgments {#acknowledgments}
 
-The design of this protocol was heavily influenced by the simplicity and security goals of the [[AGE](#ext-links)] file encryption tool. The protocol's core cryptographic mechanisms would not be as simple or robust without the prior work of the IETF community in standardizing modern primitives, particularly Hybrid Public Key Encryption (HPKE) in RFC 9180. The author wishes to thank the contributors of these foundational standards for making this work possible.
+The design of this protocol was heavily influenced by the simplicity and security goals of the age file encryption tool. The protocol's core cryptographic mechanisms would not be as simple or robust without the prior work of the IETF community in standardizing modern primitives, particularly Hybrid Public Key Encryption (HPKE) in [@?RFC9180].
+
+The integration with Exported Authenticators draws from [@?I-D.fossati-tls-exported-attestation].
+
+The SEAL Working Group charter and Confidential Computing Consortium Attestation SIG provided the use case requirements that shaped the re-attestation model.
+
+The author wishes to thank the contributors of these foundational standards for making this work possible.
 
 # External Links {#ext-links}
 
@@ -881,7 +1262,11 @@ The design of this protocol was heavily influenced by the simplicity and securit
 
 # Formal Modelling (Informative) {#app-formal-modelling-informative}
 
-The protocol's security properties were analyzed using an exploratory formal model in ProVerif [[ECA-FORMAL-MODELS](#ext-links)]. The model assumes a powerful Dolev-Yao network attacker who can intercept, modify, and inject messages. It also correctly models the Boot Factor (`BF`) as public knowledge from the start, as per the protocol's "exposure tolerance" principle ([](#core-design-principles)).
+This appendix presents formal security analysis of the **ECA bootstrap ceremony** using ProVerif [[ECA-FORMAL-MODELS](#ext-links)]. The analysis assumes a powerful Dolev-Yao network attacker and verifies core security properties.
+
+**Scope limitation**: This analysis covers ONLY bootstrap ceremonies. Re-attestation ceremonies operate under different trust assumptions (existing credential from prior attestation) and are not modeled here. Future work may extend formal analysis to re-attestation scenarios.
+
+The protocol's bootstrap security properties were analyzed using an exploratory formal model in ProVerif. The model assumes a powerful Dolev-Yao network attacker who can intercept, modify, and inject messages. It also correctly models the Binding Factor (`BF`) as public knowledge from the start, as per the protocol's "exposure tolerance" principle ([](#core-design-principles)).
 
 The analysis was conducted in two parts: verification of the core security properties against a network attacker, and an analysis of the protocol's behavior under specific key compromise scenarios to define its security boundaries.
 
@@ -906,7 +1291,7 @@ A test was conducted where an attacker compromises an `InstanceFactor` (`IF`) fr
 
 ### Verifier Key Compromise {#verifier-key-compromise}
 
-A test was conducted modeling a compromised long-term Verifier signing key [[ECA-FORMAL-MODELS](#ext-links)]:
+A test was conducted modeling a compromised long-term Verifier signing key:
 
 - **Result:** The model demonstrated that an attacker can inject arbitrary (VF', nonce') pairs, breaking the Freshness property (`event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n))` was **False**).
 
@@ -927,7 +1312,7 @@ Furthermore, when using SAE transport [@I-D.ritz-sae], even this DoS attack beco
 
 ### Attester State Reveal {#attester-state-reveal}
 
-A test was conducted modeling a compromised Attester whose ephemeral private decryption key is leaked [[ECA-FORMAL-MODELS](#ext-links)]:.
+A test was conducted modeling a compromised Attester whose ephemeral private decryption key is leaked:
 
 - **Result:** The model demonstrated that this allows a passive attacker to decrypt the Phase 2 ciphertext and steal the `ValidatorFactor` (`VF`) (`not (event(VFReleased(vf)) && attacker(vf))` was **False**).
 
@@ -935,155 +1320,106 @@ A test was conducted modeling a compromised Attester whose ephemeral private dec
 
 - **Mitigation:** This analysis provides the formal rationale for hardware-rooted Instance Factor Pattern A when the threat model must assume compromise of the underlying provisioning platform. For pattern specifications, see [](#instance-factor-patterns-ifp).
 
-# Reference Profile: ECA-VM-v1 {#app-reference-profiles}
+# Concrete Example: Continuous TEE Attestation over (D)TLS {#concrete-example-continuous-tee-attestation-over-dtls}
 
-> Stability note: This profile documents the concrete choices used by the reference prototype to enable experimentation and interop. It is non-normative and may change in future drafts based on feedback.
+This appendix provides a complete example of re-attestation for a long-running TEE workload using (D)TLS Exported Authenticators, integrating the work established by fossati et al. [@?I-D.fossati-tls-exported-attestation].
 
-## Primitives {#primitives}
+## Scenario {#scenario}
 
-- Hash / KDF: HKDF-SHA-256 (RFC5869), SHA-256 (RFC6234)
-- MAC: HMAC-SHA-256
-- Signatures: Ed25519 (RFC8032)
-- KEM/HPKE: X25519 + HPKE base mode (RFC9180) for Verifier -> Attester secrecy in Phase 2. The `eca_uuid` is used as the AAD, and the `info` parameter for key derivation is `"ECA/v1/hpke"`.
-- Nonces: Verifier freshness `vnonce` is exactly 16 bytes (encoded base64url, unpadded)
+- Client establishes initial TLS 1.3 connection to TEE-based service
+- Service performed bootstrap via ECA/SAE during provisioning
+- Client needs to verify TEE health before processing sensitive data
+- Service presents current measurements via re-attestation
 
-## Integrity Hash Beacon (IHB) {#integrity-hash-beacon-ihb}
+## Message Flow {#message-flow}
 
-- `IHB = SHA-256( BF || IF )`, rendered as lowercase hex for transport where necessary.
+~~~
+Client                              Server (TEE)
+  |                                      |
+  | TLS 1.3 Handshake                    |
+  |<------------------------------------>|
+  |                                      |
+  | ClientCertificateRequest             |
+  | {                                    |
+  |   context: random_32_bytes,          |
+  |   extensions: [cmw_attestation]      |
+  | }                                    |
+  |------------------------------------->|
+  |                                      |
+  |                         Generate TEE Quote:
+  |                  REPORTDATA = hash(context)
+  |                                      |
+  | Authenticator                        |
+  | {                                    |
+  |   Certificate,                       |
+  |   cmw_attestation: {                 |
+  |     RF: signed_EAT_from_bootstrap,   |
+  |     IF: TEE_Quote,                   |
+  |     timestamp: current_time          |
+  |   },                                 |
+  |   CertificateVerify,                 |
+  |   Finished                           |
+  | }                                    |
+  |<-------------------------------------|
+  |                                      |
+  |  Validate:                           |
+  |  - RF signature against known cert   |
+  |  - Quote signature vs manuf. key     |
+  |  - REPORTDATA binding to context     |
+  |  - Measurements against CoRIM policy |
+  |  - Timestamp freshness               |
+  |                                      |
+  | [Continue with application data]     |
+~~~
 
-## Deterministic Key Material {#deterministic-key-material}
+## Validation Details {#validation-details}
 
-All keys are deterministically derived from ceremony inputs via domain-separated HKDF invocations. Notation: `HKDF-Extract(salt, IKM)` then `HKDF-Expand(PRK, info, L)`. The `eca_uuid` is appended to the `salt` in all derivations to ensure session uniqueness.
+**RF Verification:**
+- Extract public key from bootstrap EAT
+- Verify signature on current Evidence
+- Check EAT not expired
 
-- **Phase 1 MAC key (Attester artifact MAC)**
+**IF (TEE Quote) Verification:**
+- Verify Quote signature against TEE manufacturer key
+- Confirm `REPORTDATA = SHA-256(certificate_request_context)`
+- Appraise measurements against expected values (CoRIM)
+- Validate TCB version meets minimum requirements
 
-  - `IKM = BF || IF`
-  - `salt = "ECA:salt:auth:v1" || eca_uuid`
-  - `info = "ECA:info:auth:v1"`
-  - `K_MAC_Ph1 = HKDF-Expand( HKDF-Extract(salt, IKM), info, 32 )`
-  - Usage: HMAC-SHA-256 over the CBOR Phase-1 payload bytes.
-
-- **Phase 2 ECDH/HPKE seed (Attester's ephemeral X25519 keypair)**
-
-  - `IKM = BF || IF`
-  - `salt = "ECA:salt:encryption:v1" || eca_uuid`
-  - `info = "ECA:info:encryption:v1"`
-  - `seed32 = HKDF-Expand( HKDF-Extract(salt, IKM), info, 32 )`
-  - The Attester forms an X25519 private key by clamping `seed32` per RFC7748; the public key is derived normally.
-  - The Verifier uses HPKE with the Attester's public key to encrypt `{VF, vnonce}`.
-
-- **Phase 3 signing key (Attester's Ed25519 identity keypair)**
-
-  - `IKM = BF || VF`
-  - `salt = "ECA:salt:composite-identity:v1" || eca_uuid`
-  - `info = "ECA:info:composite-identity:v1"`
-  - `sk_seed32 = HKDF-Expand( HKDF-Extract(salt, IKM), info, 32 )`
-  - The Attester initializes Ed25519 with `sk_seed32` as the private key seed and derives the corresponding public key.
-
-- **HPKE KDF `info` parameter:** `info = "ECA/v1/hpke"`
-
-## Phase Artifacts {#phase-artifacts}
-
-*This section provides a high-level description of the payloads. For concrete byte-for-byte examples, see Section 7.*
-
-### Phase 1 Payload (Attester→Repo) {#phase-1-payload-attester-repo}
-
-The Phase-1 payload is a CBOR map containing the following claims, which is then protected by an external HMAC tag.
-
-| Claim | Value Type | Description |
-| :--- | :--- | :--- |
-| `kem_pub` | `bstr` (raw 32 bytes) | Attester's ephemeral X25519 public key. |
-| `ihb` | `tstr` (lowercase hex) | Integrity Hash Beacon. |
-
-### Phase 2 Payload (Verifier -> Repo) {#phase-2-payload-verifier---repo}
-
-The Phase-2 payload is a signed CBOR map containing the following claims.
-
-| Claim | Value Type | Description |
-| :--- | :--- | :--- |
-| `C` | `tstr` (base64url unpadded) | HPKE ciphertext |
-| `vnonce` | `tstr` (base64url unpadded) | The Verifier-generated nonce. |
-
-The plaintext for HPKE encryption is the direct concatenation of the raw bytes: `plaintext = VF || vnonce`.
-
-### Phase 3 Payload (Attester -> Repo) {#phase-3-payload-attester---repo}
-
-The Phase-3 payload is a signed EAT as defined in the core protocol Section 11.1. The profile-specific constructions for proofs are as follows:
-
-- **Joint-Possession Proof (concrete for this profile):**
-  - `jp_proof = SHA-256( BF || VF )`, rendered as lowercase hex.
-- **Proof-of-Possession (concrete for this profile):**
-  - First, a bound hash is computed from the session context:
-    - `bound_data = eca_uuid || IHB_bytes || eca_attester_id_bytes || vnonce_raw_bytes`
-    - `bound_hash = SHA-256( bound_data )`
-  - Then, a dedicated MAC key is derived:
-    - `IKM = BF || VF`
-    - `salt = "ECA:salt:kmac:v1" || eca_uuid`
-    - `info = "ECA:info:kmac:v1"`
-    - `K_MAC_PoP = HKDF-Expand( HKDF-Extract(salt, IKM), info, 32 )`
-  - Finally, the PoP tag is computed over the bound hash:
-    - `pop_tag = base64url( HMAC-SHA-256( K_MAC_PoP, bound_hash ) )`
-- The `jp_proof` and `pop_tag` are included in the EAT, which is then signed with the Attester's Ed25519 key.
-
-## Verification (Verifier) {#verification-verifier}
-
-- Verify Phase-1 MAC with `K_MAC_Ph1`.
-- Verify the signed Phase-2 payload with the Verifier's public key; HPKE-Open with Attester's kem key to recover `{VF, vnonce}`.
-- Recompute Attester signing key from `BF||VF` and verify the EAT signature.
-- Recompute `jp_proof` and `pop_tag` inputs and compare constant-time.
-- Apply local appraisal policy; on success, emit an Attestation Result bound to `eca_uuid`.
-
-## Interop Notes {#interop-notes}
-
-- **Encodings:** All binary fields referenced in EAT must be explicitly encoded (e.g., base64url) and stated as such in the claims table. NumericDate claims (`iat`, `nbf`, `exp`) use 64-bit unsigned integers.
-- **Side-Channel Resistance:** To mitigate timing attacks, implementations SHOULD use constant-time cryptographic comparisons. Payloads that are inputs to cryptographic operations (e.g., Evidence) MAY be padded to a fixed size using a length-prefix scheme to ensure unambiguous parsing.
+**Context Binding:**
+- Ensures Quote was generated specifically for this request
+- Prevents replay of old Quotes across sessions
 
 # Change log
 
 ## Changes since -00
 
-Of course. Here is a detailed enumeration of the changes between `draft-ritz-eca-01` and `draft-ritz-eca-02`.
+This revision represents a significant architectural evolution of the ECA protocol based on deeper understanding of the existing Attestation landscape. The scope has been expanded from a single bootstrap ceremony to a comprehensive attestation pattern.
 
-### Major Conceptual and Editorial Changes
+### Major Architectural Changes
 
-* **Clarified Factor Definitions:** The core concepts of Boot Factor (BF) and Instance Factor (IF) have been significantly refined for clarity.
-    * The **Boot Factor (BF)** is now explicitly described as a "publicly verifiable" value used to scope the ceremony, with its security not depending on confidentiality. The new draft provides concrete examples like an image digest or SBOM tag. The previous draft described it as an "exposure-tolerant" value acting as a "public challenge token".
-    * The **Instance Factor (IF)** has been changed from a "per-instance secret value" to an "inherent, measurable property of the instance". This major shift reframes the protocol from proving possession of a shared secret to proving a verifiable state or property (e.g., a TPM quote or TEE report) that is never transmitted directly.
-* **Added Conceptual Model:** A new non-normative "Conceptual Model" section was added to explain the roles of the three factors (BF, IF, VF) in simple, metaphorical terms.
-* **WIMSE Integration:** The protocol is now explicitly positioned as a foundational component for WIMSE (Workload Identity in Multi-Cloud Secure Environments) architectures. This is mentioned in the Abstract and a new dedicated section, "ECA in a WIMSE Architecture," has been added.
-* **Added Diagrams:** Several new diagrams were added throughout the document to visually explain protocol flows and integration patterns, including:
-    * A high-level conceptual ceremony overview.
-    * A diagram for Relying Party consumption of an Attestation Result.
-    * An overview of ECA's integration with other identity frameworks.
-    * Specific integration diagrams for ACME-RATS and SPIFFE/SPIRE.
+* **Dual-Ceremony Model:** The protocol is no longer a single three-phase ceremony. It now defines two distinct but related ceremonies:
+    1.  **Bootstrap Ceremony:** For initial "cold start" identity establishment in environments without existing credentials.
+    2.  **Re-attestation Ceremony:** A lightweight, single round-trip ceremony for continuous verification of an established identity, ideal for long-running workloads and TEEs.
 
-### Section-by-Section Changes
+* **New Session-Bound Deployment Model:** A primary deployment model using **(D)TLS Exported Authenticators** has been introduced. This aligns the protocol with the **SEAL WG charter** and directly supports continuous attestation for Trusted Execution Environments (TEEs).
 
-* **Abstract:**
-    * Changed "ephemeral compute instances" to "ephemeral workloads".
-    * Added a sentence positioning ECA as a "foundational component for architectures like WIMSE".
-    * Updated the description of the Instance Factor from "secret" to "inherent and measurable".
+* **Consolidation of Implementation Guide:** Key concepts from the separate implementation guide (`draft-ritz-eca-impl-00`) have been merged into this core specification for clarity and completeness. This includes:
+    * **Instance Factor Patterns (IFP):** The Hardware-Rooted (A), Orchestrator-Provisioned (B), and Artifact-Based (C) patterns are now formally part of the core draft.
+    * **Reference Profile and Examples:** A concrete reference profile (`ECA-VM-BOOTSTRAP-V1`) and a detailed (D)TLS example have been included as appendices.
+    * **Implementation Status:** The section detailing the prototype's status is now included.
 
-* **Problem Statement and Motivation:**
-    * Added text clarifying that ECA provides a solution to the "trust gap" in multi-cloud environments and is designed for consumption by frameworks like ACME and SPIFFE/SPIRE.
+### Scope and Terminology Refinements
 
-* **Instance Factor Patterns (IFP):**
-    * The descriptions for Patterns A, B, and C were updated to align with the new definition of the Instance Factor as a measurable property rather than a simple secret.
+* **Protocol Renaming:** The draft is now titled **"Entity and Compute Attestation"** (formerly "Ephemeral Compute Attestation") to reflect its broadened applicability to both ephemeral and long-running entities.
+* **New Terminology:** Introduced new core terms to support the dual-ceremony model, most notably the **Re-attestation Factor (RF)**, which is the credential used to prove identity continuity in re-attestation ceremonies. The roles of **Binding Factor (BF)** and **Instance Factor (IF)** have been clarified for each ceremony type.
 
-* **Core Design Principles:**
-    * The "Exposure Tolerance" principle was renamed to "Publicly Sourced Boot Factor" and its description was expanded to better explain that security is anchored on the binding of the public BF to the measurable IF.
+### Expanded Integration and Use Cases
 
-* **Protocol Overview & Validation Gates:**
-    * The detailed ASCII sequence diagram from -01 was replaced with a higher-level conceptual diagram.
-    * The list of 11 Validation Gates was restructured with "Phase 1 Appraisal Gates" and "Phase 3 Appraisal Gates" subheadings for better readability.
+* **WIMSE and SEAL Alignment:** The document now explicitly maps ECA roles and concepts to the **WIMSE (Workload Identity in Multi-Cloud Secure Environments)** architecture and details its alignment with the IETF **SEAL (Secure Asset and "Entity" Lifecycle)** working group's goals.
+* **Post-Attestation Patterns:** Added a new section that describes the credential lifecycle, stateful re-attestation, and patterns for chaining attestations to build hierarchical trust.
 
-* **Post-Attestation Patterns:**
-    * Added a diagram and introductory text illustrating how a Relying Party consumes the Attestation Result.
-    * Clarified the "Stateful Re-Attestation" section to include the use of existing credentials as part of the `IF` for renewal ceremonies.
+### Editorial Changes
 
-* **Security Considerations:**
-    * The "Exposure Tolerance" and "Impersonation Risk" subsections were rewritten to align with the refined definitions of BF and IF. The focus shifted from the risk of concurrent exposure of two secrets to the risk of an adversary being able to forge a proof for a measurable property (IF).
-
-* **Integration with Existing Frameworks:**
-    * A new section, "ECA in a WIMSE Architecture," was added to detail role mapping and workflow integration.
-    * The subsections for ACME-RATS and SPIFFE/SPIRE were updated with new diagrams to better illustrate the integration flows.
+* Added **Muhammad Usama Sardar** as a co-author.
+* Restructured the document significantly to introduce the conceptual model and deployment patterns upfront.
+* Updated the formal model analysis in the appendix to reflect the protocol's evolution and provide clearer interpretations of the security boundary tests.
