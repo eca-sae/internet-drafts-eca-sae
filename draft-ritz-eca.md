@@ -960,9 +960,9 @@ The ECA protocol is designed to complement, not replace, existing identity and a
 ~~~
     Figure 3: Integration with Existing Frameworks
 
-## SEAL Working Group Alignment {#seal-working-group-alignment}
+## Alignment with Proposed SEAL Working Group {#seal-working-group-alignment}
 
-This specification's **re-attestation ceremony** directly implements the SEAL WG charter requirements for attested (D)TLS:
+This specification's **re-attestation ceremony** directly implements the proposed SEAL WG charter requirements for attested (D)TLS:
 
 | SEAL Requirement | How ECA Satisfies |
 |------------------|-------------------|
@@ -1214,7 +1214,7 @@ The integration with Exported Authenticators draws from [@?I-D.fossati-tls-expor
 
 The SEAL Working Group charter and Confidential Computing Consortium Attestation SIG provided the use case requirements that shaped the re-attestation model.
 
-The author wishes to thank the contributors of these foundational standards for making this work possible.
+The authors wish to thank the contributors of these foundational standards for making this work possible.
 
 # External Links {#ext-links}
 
@@ -1322,10 +1322,11 @@ A test was conducted modeling a compromised Attester whose ephemeral private dec
 
 # Concrete Example: Continuous TEE Attestation over (D)TLS {#concrete-example-continuous-tee-attestation-over-dtls}
 
-This appendix provides a complete example of re-attestation for a long-running TEE workload using (D)TLS Exported Authenticators, integrating the work established by fossati et al. [@?I-D.fossati-tls-exported-attestation].
+This appendix provides a complete example of re-attestation for a long-running TEE workload using (D)TLS Exported Authenticators, integrating the work established by Fossati et al. [@?I-D.fossati-tls-exported-attestation].
 
 ## Scenario {#scenario}
 
+We consider Server as Attester.
 - Client establishes initial TLS 1.3 connection to TEE-based service
 - Service performed bootstrap via ECA/SAE during provisioning
 - Client needs to verify TEE health before processing sensitive data
@@ -1415,7 +1416,7 @@ This revision represents a significant architectural evolution of the ECA protoc
 
 ### Expanded Integration and Use Cases
 
-* **WIMSE and SEAL Alignment:** The document now explicitly maps ECA roles and concepts to the **WIMSE (Workload Identity in Multi-Cloud Secure Environments)** architecture and details its alignment with the IETF **SEAL (Secure Asset and "Entity" Lifecycle)** working group's goals.
+* **WIMSE and SEAL Alignment:** The document now explicitly maps ECA roles and concepts to the **WIMSE (Workload Identity in Multi-Cloud Secure Environments)** architecture and details its alignment with the proposed **SEAL (Secure Evidence and Attestation Layer)** working group's goals.
 * **Post-Attestation Patterns:** Added a new section that describes the credential lifecycle, stateful re-attestation, and patterns for chaining attestations to build hierarchical trust.
 
 ### Editorial Changes
