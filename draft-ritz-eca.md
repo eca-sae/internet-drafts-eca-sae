@@ -51,9 +51,9 @@ The protocol is designed to be transport-agnostic and to integrate with existing
 
 # Motivation and Use Cases
 
-This section describes scenarios where remote attestation enhances trust decisions by replacing static, possession-based secrets with cryptographic proof of a workload's identity and state. 
+This section describes scenarios where remote attestation enhances trust decisions by replacing static, possession-based secrets with cryptographic proof of a compute instance's identity and state. 
 
-In the RATS model, the workload acts as an Attester, generating verifiable Evidence about its software and configuration. This Evidence is appraised by a Verifier, which produces a trusted Attestation Result (AR) for a Relying Party to consume, realizing the RATS Passport Model [@!RFC9334]. This fundamentally shifts the trust model from "who has the secret" to "what can be proven." 
+In the RATS model, the compute instance acts as an Attester, generating verifiable Evidence about its software and configuration. This Evidence is appraised by a Verifier, which produces a trusted Attestation Result (AR) for a Relying Party to consume, realizing the RATS Passport Model [@!RFC9334]. This fundamentally shifts the trust model from "who has the secret" to "what can be proven." 
 
 The following use cases illustrate operational challenges that attestation can address.
 
@@ -61,7 +61,7 @@ The following use cases illustrate operational challenges that attestation can a
 
 In environments without provider-backed identity mechanisms, such as bare-metal servers without TPMs or VMs limited to cloud-init, operators bootstrap trust by injecting static secrets into startup configuration. This creates a race condition where the first entity presenting the secret receives access, regardless of intended role. The resulting trust model depends on secret possession rather than verifiable identity.
 
-Remote attestation can address this gap by enabling cryptographic proof of workload identity before credential release.
+Remote attestation can address this gap by enabling cryptographic proof of compute instance identity before credential release.
 
 ~~~
 +--------------------------------------+
@@ -174,7 +174,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 # Conceptual Model (Informational) {#conceptual-model}
 
-The ECA protocol defines a unified pattern for the attestation lifecycle through two distinct but related attestation procedures. A workload without a verifiable identity can be bootstrapped on Day 0 to obtain a verifiable identity, and then use that verifiable identity for efficient attestation renewal on an ongoing basis.
+The ECA protocol defines a unified pattern for the attestation lifecycle through two distinct but related attestation procedures. A compute instance without a verifiable identity can be bootstrapped on Day 0 to obtain a verifiable identity, and then use that verifiable identity for efficient attestation renewal on an ongoing basis.
 
 ~~~
                                  +---------------------------+
@@ -241,7 +241,7 @@ In these environments without a hardware root of trust, the primary software-bas
 
 The Join Token is a **bearer token**, and its security model rests on the secure delivery of the token. If the token is intercepted or leaked, an attacker can use it to enroll a rogue workload.
 
-ECA's identity bootstrap procedure offers a fundamentally more secure alternative by replacing this "possession of a secret" model with one based on verifiable proof of the workload's identity. Using measurable properties of the software instance itself (like its image digest), ECA generates a cryptographic proof that is bound to the workload, drastically reducing the risk of impersonation.
+ECA's identity bootstrap procedure offers a fundamentally more secure alternative by replacing this "possession of a secret" model with one based on verifiable proof of the compute instance's identity. Using measurable properties of the software instance itself (like its image digest), ECA generates a cryptographic proof that is bound to the compute instance, drastically reducing the risk of impersonation.
 
 In this pattern, ECA precedes or augments SPIRE node admission. An Attester would perform an ECA bootstrap procedure to obtain an AR. This AR is then provided as input to a custom SPIRE node-attestor plugin. The plugin validates the AR and extracts claims from it (e.g., `eca_uuid`, EUID, IHB) to use as SPIRE selectors for registration policy. Once the node is admitted, SPIRE issues SVIDs as usual.
 
@@ -279,17 +279,17 @@ This section specifies the **identity bootstrap procedure** in detail. The attes
 The identity bootstrap procedure is the security-critical foundation of ECA. All formal security analysis ([](#app-formal-modelling-informative)) applies to this procedure type. It follows a three-phase process, beginning with the Attester in a Privileged Credential Vacuum and concluding with the Verifier producing a signed Attestation Result (AR) upon successful validation.
 
 ~~~
-   Attester                  Verifier               Relying Party
- (Migrated Workload)       (Attestation Service)  (CA / IAM System)
+   Verifier                    Attester            Relying Party
+   (Client)               (Compute Instance)  (CA / IAM System)
       |                           |                       |
-      |----- Evidence ----------> |                       |
+      |<----- Evidence ---------- |                       |
       | (e.g., configuration)     |..Appraise vs. Policy..|
       |                           | (e.g., platform state |
-      |<--- Attestation Result ---|                       |
+      |--- Attestation Result --->|                       |
       |                                                   |
-      |--------------------- CSR + Attestation Result---->|
+      |<--------------------- CSR + Attestation Result----|
       |                                                   |
-      |<--------------------- Certificate / Token --------|
+      |--------------------- Certificate / Token -------->|
 ~~~
 
 ## Validation Gates {#sec-validation-gates}
@@ -497,7 +497,7 @@ Once an attestation procedure concludes, the Attestation Result (AR) can be used
 
 ~~~
    Attester                  Verifier               Relying Party
- (Migrated Workload)       (Attestation Service)  (CA / IAM System)
+ (Workload)            (Attestation Service)    (CA / IAM System)
       |                           |                       |
       |----- Evidence ----------> |                       |
       | (e.g., configuration)     |..Appraise vs. Policy..|
