@@ -113,19 +113,20 @@ In confidential computing scenarios, clients establish sessions with TEE-based s
 Continuous attestation can maintain trust throughout long-lived sessions.
 
 ~~~
-   Attester               Verifying Relying Party
- (TEE-Based Server)         (Client Application)
-      |                           |
-      |<== Established Session ==>|  
-      |                           |
-      |<--- Health check ---------| 
-      | (bound to session state)  |
-      |                           |                
-      |----- Evidence ----------->|                       
-      |(HW RoT Quote/Measurements)| 
-      |                           |Appraise vs. Policy 
-      |<--- Policy Decision ------|(e.g., CORiM[1] validation)
-      |(upkeep or destroy session)|                             
+            Verifying Relying Party          Attester
+             (Client Application)       (TEE-Based Server)
+                     |                           |
+                     |<== Established Session ==>|  
+                     |                           |
+                     |--------- Health check --->| 
+                     | (bound to session state)  |
+                     |                           |                
+                     |<--- Evidence -------------|                       
+                     |(HW RoT Quote/Measurements)| 
+ Appraise vs. Policy |                           | 
+     (e.g., CORiM[1] |                           |
+     validation)     |------ Policy Decision --->|                             
+                     |(upkeep or destroy session)|                                                     
 ~~~
 [1] [@?I-D.ietf-rats-corim]
 
