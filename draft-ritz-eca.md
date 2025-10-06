@@ -30,89 +30,104 @@ status = "experimental"
 
 .# Abstract
 
-This document specifies Entity and Compute Attestation (ECA), a protocol for continuous attestation of high-assurance workloads such as Trusted Execution Environments (TEEs) using RATS architecture. ECA defines two ceremonies: a bootstrap ceremony to establish verifiable identity in credential-vacuum environments (bare-metal, sovereign clouds, edge), and a re-attestation ceremony enabling single round-trip verification over (D)TLS using TLS Exported Authenticators with the `cmw_attestation` extension. Both ceremonies are transport-agnostic and complement frameworks like WIMSE. Bootstrap security properties are formally analyzed using ProVerif (work-in-progress).
+This document specifies Entity and Compute Attestation (ECA), a protocol for continuous attestation of high-assurance workloads such as Trusted Execution Environments (TEEs) using RATS architecture. ECA defines two distinct attestation procedures: an identity bootstrap procedure to establish verifiable identity where none has yet been provisioned (bare-metal, sovereign clouds, edge), and an attestation renewal procedure enabling single round-trip verification over (D)TLS using TLS Exported Authenticators with the `cmw_attestation` extension. Both procedures are transport-agnostic and complement frameworks like WIMSE. The security properties of the bootstrap procedure are formally analyzed, with the model provided in an informative appendix.
 
 {mainmatter}
 
-# Scope {#scope}
+# Introduction
 
-ECA profiles the RATS [@!RFC9334] architecture and defines reusable cryptographic ceremonies for attestation. It assumes familiarity with the vocabulary and concepts defined in the RATS architecture. 
+In many modern computing environments, such as bare-metal deployments, multi-cloud instances, or edge devices, workloads often lack a built-in, verifiable identity. This "Identity Vacuum" complicates trust establishment, forcing reliance on less secure methods like injected static secrets that if intercepted or leaked, could enable an attacker can use them to enroll a rogue workload.
 
-The protocol's security properties regarding verifiable identity bootstrapping have been explored formally using ProVerif, with detailed analysis in [](#app-formal-modelling-informative) demonstrating resilience against network attackers and defining precise security boundaries under key compromise scenarios.
+Concurrently, high-assurance workloads, particularly those in Trusted Execution Environments (TEEs), require not only initial authentication but also continuous verification of their state. A point-in-time check is insufficient to detect compromises that may occur mid-session, creating a need for ongoing, stateful attestation that is cryptographically bound to the active communication channel.
 
-# Problem Statement and Motivation
+This document specifies Entity and Compute Attestation (ECA), a protocol that profiles the Remote Attestation Procedures (RATS) architecture [@!RFC9334] to address these challenges. ECA defines two distinct cryptographic attestation procedures:
 
-Secure remote workloads, especially long-running Trusted Execution Environments (TEEs), require more than just initial, point-in-time attestation; they need continuous verification to prove their ongoing trustworthiness. While this addresses the lifecycle of established identities, it creates an operational gap: how do we handle instances in environments that lack an initial, verifiable identity, such as bare-metal servers or multi-cloud VMs? This inconsistency creates significant challenges for portability and security. A complete solution must therefore address both the initial, verifiable bootstrapping of an identity from a credential vacuum and the continuous, stateful re-attestation of that identity throughout its lifecycle.
+    1.  **Identity Bootstrapping:** For initial "cold start" establishment of verifiable identity in environments not yet provisioned.
+    2.  **Attestation Renewal:** A lightweight, single round-trip attestation procedure for continuous verification of established identity and state, ideal for long-running workloads and TEEs.
 
-## ECA: A Unified Pattern for the Attestation Lifecycle
+The protocol is designed to be transport-agnostic and to integrate with existing identity frameworks and transport protocols such as (D)TLS.
 
-The **Entity and Compute Attestation (ECA)** protocol provides a unified pattern for the attestation lifecycle, centered on a lightweight **re-attestation ceremony**. This ceremony is designed for the continuous, stateful verification of high-assurance workloads like Trusted Execution Environments (TEEs), enabling a single round-trip health check over protocols like (D)TLS.
+# Motivation and Use Cases
 
-For re-attestation over (D)TLS, ECA leverages TLS Exported Authenticators [@?RFC9261] with the `cmw_attestation` extension [@?I-D.fossati-tls-exported-attestation], which this specification integrates to enable attestation credentials to be conveyed directly in the Certificate message during post-handshake authentication. This eliminates reliance on real-time certificate issuance from a Certificate Authority (CA), reducing handshake delays while ensuring attestation evidence remains cryptographically bound to the TLS session.
+This section describes scenarios where remote attestation enhances trust decisions by replacing static, possession-based secrets with cryptographic proof of a workload's identity and state. 
 
-To enable this in environments that lack a built-in hardware identity—such as bare-metal, multi-cloud, or edge deployments—ECA also defines a foundational **bootstrap ceremony**. This ceremony establishes a verifiable cryptographic identity from a "credential vacuum," bridging the gap for 
-workloads without a pre-existing trust anchor.
+In the RATS model, the workload acts as an Attester, generating verifiable Evidence about its software and configuration. This Evidence is appraised by a Verifier, which produces a trusted Attestation Result (AR) for a Relying Party to consume, realizing the RATS Passport Model [@!RFC9334]. This fundamentally shifts the trust model from "who has the secret" to "what can be proven." 
 
-ECA is designed to realize the Passport Model from the RATS Architecture. In this model, an **Attester** engages in a ceremony with a **Verifier** to obtain a portable, signed **Attestation Result** (the "passport"). This passport, typically an **Entity Attestation Token (EAT)**, can then be presented to any number of **Relying Parties** (RPs) to make trust decisions.  In this specification, the workload server is the Attester, the Verifier provides the attestation service, and the consuming application or service (e.g., a KMS) is the Relying Party.
+The following use cases illustrate operational challenges that attestation can address.
 
-> **Working with Existing Frameworks:** ECA design focus was to complement, not replace, existing identity and attestation frameworks. For detailed exploration of how ECA integrates with ACME, BRSKI, SPIFFE/SPIRE, and other systems, see [](https://www.google.com/search?q=%23integration-with-existing-frameworks).
+## Bootstrapping Verifiable Identity in Constrained Environments
 
------
+In environments without provider-backed identity mechanisms, such as bare-metal servers without TPMs or VMs limited to cloud-init, operators bootstrap trust by injecting static secrets into startup configuration. This creates a race condition where the first entity presenting the secret receives access, regardless of intended role. The resulting trust model depends on secret possession rather than verifiable identity.
 
-## ECA Ceremonies
-
-ECA defines two related ceremonies that create a complete attestation lifecycle: a workload without a verifiable identity can be bootstrapped on Day 0 to obtain a signed EAT/AR and then use that credential for efficient re-attestation on Day N. Workloads already backed with verifiable identities like long running Trusted Execution Environments (TEEs) are ready for attested connections implicitly. 
+Remote attestation can address this gap by enabling cryptographic proof of workload identity before credential release.
 
 ~~~
-                                 +---------------------------+
-                                 |  Re-attestation Ceremony  |
-                                 |  (Warm Start Cycle)       |
-                                 +---------------------------+
-                                             ^
-              Input: prior credential (RF)   | 
-                     "Re-attestation Factor" |
- +------------------>---------------------+-------+
- | (Updated AR becomes RF for next cycle) |  RF   |
- |                                        +-------+
- ^                                            | Output: Updated AR/EAT
- |                                            v
- |                                        +----------+
- |    [ Day N: Periodic Health-check ]    | Updated  |
- +-------------------<--------------------| AR / EAT |
-                                          +----------+
-                                              ^
-                                              |
-                                              | Verifiable Credential
-                                              | (Enters the cycle)
-                                              |
-                                 +--------------------------+
- [ Day 0: On-Ramp ]              |    Bootstrap Ceremony    |
- (Lacks Verifiable Identity      |      (Cold Start)        |
-                                 +--------------------------+
++--------------------------------------+
+|  Bare-Metal / Alt-Cloud Environments | 
+| (No provider-backed identity)        | 
++--------------------------------------+
+                   |
+                   v
+         +--------------------+
+         | Attestation        |
+         | (Identity Proof)   |
+         +--------------------+
+                   |
+                   v
+    +-----------------------------+
+    | Identity Consumers          |
+    | (IAM, KMS, Access Control)  |
+    +-----------------------------+
 ~~~
 
-### Continuous Verification (Re-attestation Ceremony)
+## Multi-Cloud Portability
 
-This single-phase ceremony enables ongoing verification for instances that already possess a credential from a prior attestation (the **Re-attestation Factor, or RF**).
+When workloads migrate between cloud providers and on-premise environments, their provider-backed identity mechanisms are lost. Operators must then provision long-lived static credentials like API keys. This creates a risk where credential theft enables persistent workload impersonation.
 
-1.  **Attester presents** its existing credential (RF) along with fresh measurements (Instance Factor, IF).
-2.  **Verifier validates** the credential and appraises the new measurements against its policy.
+Attestation can enable portable identity that survives migration across trust domains.
 
-Its primary use case is for periodic health checks of long-running TEE-based services, and it derives its security from the initial bootstrap ceremony and the secure transport.
+~~~
++--------------------------------------+
+|  Workloads Across Environments       | 
+| (AWS | Azure | Bare-Metal | Edge)    | 
++--------------------------------------+
+                   |
+                   v
+         +--------------------+
+         | Attestation        |
+         |(Portable Identity) |
+         +--------------------+
+                   |
+                   v
+    +-----------------------------+
+    | Identity Systems            |
+    | (CA, SPIFFE/SPIRE, IAM) )   |
+    +-----------------------------+
+~~~
 
-### Initial Identity Bootstrap (Bootstrap Ceremony)
 
-This three-phase ceremony establishes initial identity for instances starting without any credentials.
+## Continuous TEE Verification
 
-1.  **Attester proves possession** of a public **Binding Factor (BF)** and a measurable **Instance Factor (IF)**.
-2.  **Verifier validates this proof** and releases a secret challenge (**Validator Factor, VF**).
-3.  **Attester proves joint possession** of the factors to receive its initial credential.
+In confidential computing scenarios, clients establish sessions with TEE-based services after verifying initial attestation evidence. This point-in-time verification cannot detect post-handshake compromises. An attacker who compromises the TEE mid-session can exfiltrate sensitive data while the client continues operating under stale trust assumptions.
 
-Its primary use case is cold-start identity establishment, with security anchored in cryptographic proofs analyzed in the formal model.
+Continuous attestation can maintain trust throughout long-lived sessions.
 
-### Transport Agnosticism
-
-ECA's security is derived from the cryptographic content of its exchanged artifacts, not the transport layer. Both ceremonies are transport-agnostic, with recommended patterns including TLS Exported Authenticators for interactive re-attestation and the pull-only Static Artifact Exchange (SAE) for bootstrapping in constrained networks.
+~~~
+   Attester               Verifying Relying Party
+ (TEE-Based Server)         (Client Application)
+      |                           |
+      |<== Established Session ==>|  
+      |                           |
+      |<--- Health check ---------| 
+      | (bound to session state)  |
+      |                           |                
+      |----- Evidence ----------->|                       
+      |(HW RoT Quote/Measurements)| 
+      |                           |Appraise vs. Policy 
+      |<--- Policy Decision ------|(e.g., CORiM[1] validation)
+      |(upkeep or destroy session)|                             
+~~~
+[1] [@?I-D.ietf-rats-corim]
 
 # Conventions and Definitions {#conventions-and-definitions}
 
