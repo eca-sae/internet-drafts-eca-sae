@@ -30,7 +30,9 @@ status = "experimental"
 
 .# Abstract
 
-This document specifies Entity and Compute Attestation (ECA), a protocol for continuous attestation of high-assurance workloads such as Trusted Execution Environments (TEEs) using RATS architecture. ECA defines two distinct attestation procedures: an identity bootstrap procedure to establish verifiable identity where none has yet been provisioned (bare-metal, sovereign clouds, edge), and an attestation renewal procedure enabling single round-trip verification over (D)TLS using TLS Exported Authenticators with the `cmw_attestation` extension. Both procedures are transport-agnostic and complement frameworks like WIMSE. The security properties of the bootstrap procedure are formally analyzed, with the model provided in an informative appendix.
+Heterogenous workloads across multi-cloud, bare-metal, and edge environments often lack verifiable identities, relying instead on pre-shared secrets that enable impersonation if intercepted. Concurrently, Trusted Execution Environments (TEEs) and other high-assurance workloads are limited to single point-in-time attestation when they otherwise require continuous verification of platform trustworthiness throughout long-running sessions.
+
+This document specifies Entity and Compute Attestation (ECA), a protocol within the RATS architecture that addresses both challenges. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish cryptographically verifiable identity for ephemeral workloads through proof of possession without the use of secrets like bearer tokens, and an attestation renewal procedure providing single round-trip verification bound to (D)TLS sessions via TLS Exported Authenticators. Both procedures are transport-agnostic and integrate with frameworks like WIMSE and SPIFFE/SPIRE. The bootstrap procedure's security properties have been formally analyized (see Appendix A). 
 
 {mainmatter}
 
