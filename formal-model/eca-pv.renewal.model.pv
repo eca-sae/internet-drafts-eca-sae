@@ -4,9 +4,33 @@
   Maps to the "Concrete Example: Continuous TEE Attestation over (D)TLS"
 *)
 
+(* 
+   Definitions:
+   
+   Binding Factor (BF): Attestation scope. 
+   
+   Instance Factor (IF): An inherent, measurable property of the instance 
+   that is verifiable by the Verifier. The IF value itself is never 
+   transmitted directly; instead, the Attester proves possession through 
+   cryptographic means (e.g., signature, quote, attestation report).
+   
+   Renewal Factor (RF): A cryptographic credential presented 
+   by an Attester as proof of an established identity.
+   
+   Verifying Relying Party (VRP): An entity that fulfills the roles 
+   of both Verifier and Relying Party, particularly in attestation 
+   renewal procedures. The VRP directly appraises Evidence from an 
+   Attester to make an authorization decision without consulting 
+   an external Verifier.
+   
+   Integrity Hash Beacon (IHB): A SHA-256 binding of BF to IF that 
+   enables exposure-tolerant authentication while preventing 
+   pre-computation attacks to mitigate MiTM threats.
+*)
+
 (* --- Types --- *)
-type BootFactor.
-type InstanceFactor.
+type BindingFactor. (* BF: Server's X.509 certificate public key. *)
+type InstanceFactor. (* IF: TEEQuote *)
 type RenewalFactor. (* RF: Signed EAT from prior bootstrap *)
 type PublicKey.
 type PrivateKey.
@@ -17,11 +41,11 @@ type IHB.
 
 (* --- Constants and Channels --- *)
 free public_channel: channel.
-free bootFactor: BootFactor. (* BF is public *)
+free bindingFactor: BindingFactor. (* BF is public *)
 
 (* --- Cryptographic Primitives --- *)
 
-(* Verifier's long-term keypair for signing contexts *)
+(* VRP's long-term keypair for signing contexts *)
 fun pk(PrivateKey): PublicKey.
 fun signContext(CertificateRequestContext, PrivateKey): Signature.
 reduc forall ctx: CertificateRequestContext, sk: PrivateKey; 
@@ -43,26 +67,26 @@ reduc forall context_hash: bitstring, ifa: InstanceFactor;
       verifyTEEQuote(generateTEEQuote(context_hash, ifa), ifa) = context_hash.
 
 (* IHB calculation - binds BF to IF *)
-fun calculateIHB(BootFactor, InstanceFactor): IHB.
+fun calculateIHB(BindingFactor, InstanceFactor): IHB.
 
 (* --- Events for Core Properties --- *)
-event AttesterInitiatesRenewal(BootFactor, InstanceFactor, RenewalFactor, CertificateRequestContext).
-event VerifierAcceptsRenewal(BootFactor, InstanceFactor, RenewalFactor, CertificateRequestContext).
-event VerifierGeneratesContext(CertificateRequestContext).
+event AttesterAnswersChallenge(BindingFactor, InstanceFactor, RenewalFactor, CertificateRequestContext).
+event VRPAcceptsRenewal(BindingFactor, InstanceFactor, RenewalFactor, CertificateRequestContext).
+event VRPGeneratesContext(CertificateRequestContext).
 event AttesterUsesContext(CertificateRequestContext).
 event ValidRFVerified(RenewalFactor).
 event FreshMeasurementsVerified(InstanceFactor).
 
 (* --- Protocol Processes --- *)
 
-let AttesterProcessRenewal(bf: BootFactor, ifa: InstanceFactor, rf: RenewalFactor, verifierPubKey: PublicKey) =
+let AttesterProcessRenewal(bf: BindingFactor, ifa: InstanceFactor, rf: RenewalFactor, vrpPubKey: PublicKey) =
     (* Receive CertificateRequest with SIGNED context 
        This models TLS Exported Authenticator authentication *)
     in(public_channel, (context: CertificateRequestContext, context_sig: Signature));
     
-    (* CRITICAL: Verify the context came from the legitimate Verifier
+    (* CRITICAL: Verify the context came from the legitimate VRP
        This models that in real TLS, the CertificateRequest is authenticated *)
-    let verified_context = verifyContextSig(context, context_sig, verifierPubKey) in
+    let verified_context = verifyContextSig(context, context_sig, vrpPubKey) in
     if verified_context = context then
         event AttesterUsesContext(context);
         
@@ -72,7 +96,7 @@ let AttesterProcessRenewal(bf: BootFactor, ifa: InstanceFactor, rf: RenewalFacto
         let tee_quote = generateTEEQuote(context_hash, ifa) in
         let ihb = calculateIHB(bf, ifa) in
         
-        event AttesterInitiatesRenewal(bf, ifa, rf, context);
+        event AttesterAnswersChallenge(bf, ifa, rf, context);
         
         (* Construct Evidence payload as specified in I-D *)
         let evidence_payload = (bf, rf, tee_quote, context, ihb) in
@@ -82,19 +106,19 @@ let AttesterProcessRenewal(bf: BootFactor, ifa: InstanceFactor, rf: RenewalFacto
         out(public_channel, (evidence_payload, signature))
     else 0.
 
-let VerifierProcessRenewal(expected_bf: BootFactor, expected_ifa: InstanceFactor, 
-                           expected_rf: RenewalFactor, verifierPrivKey: PrivateKey) =
+let VRPProcessRenewal(expected_bf: BindingFactor, expected_ifa: InstanceFactor, 
+                           expected_rf: RenewalFactor, vrpPrivKey: PrivateKey) =
     (* Generate fresh context (modeling TLS CertificateRequest) *)
     new context: CertificateRequestContext;
-    event VerifierGeneratesContext(context);
+    event VRPGeneratesContext(context);
     
     (* Sign the context to authenticate it (models TLS handshake authentication) *)
-    let context_sig = signContext(context, verifierPrivKey) in
+    let context_sig = signContext(context, vrpPrivKey) in
     out(public_channel, (context, context_sig));
     
     (* Receive Evidence *)
     in(public_channel, (evidence_payload: bitstring, sig: Signature));
-    let (rec_bf: BootFactor, rec_rf: RenewalFactor, rec_quote: TEEQuote, 
+    let (rec_bf: BindingFactor, rec_rf: RenewalFactor, rec_quote: TEEQuote, 
          rec_context: CertificateRequestContext, rec_ihb: IHB) = evidence_payload in
     
     (* Validation Gates from I-D section 8.4 *)
@@ -120,7 +144,7 @@ let VerifierProcessRenewal(expected_bf: BootFactor, expected_ifa: InstanceFactor
                     (* Gate 5: IHB Validation *)
                     let expected_ihb = calculateIHB(expected_bf, expected_ifa) in
                     if rec_ihb = expected_ihb then
-                        event VerifierAcceptsRenewal(expected_bf, expected_ifa, expected_rf, context); 0
+                        event VRPAcceptsRenewal(expected_bf, expected_ifa, expected_rf, context); 0
                     else 0
                 else 0
             else 0
@@ -129,17 +153,17 @@ let VerifierProcessRenewal(expected_bf: BootFactor, expected_ifa: InstanceFactor
 
 (* --- Core Security Queries --- *)
 
-(* Authentication: Verifier only accepts if Attester legitimately initiated *)
-query bf: BootFactor, ifa: InstanceFactor, rf: RenewalFactor, ctx: CertificateRequestContext;
-      inj-event(VerifierAcceptsRenewal(bf, ifa, rf, ctx)) ==> inj-event(AttesterInitiatesRenewal(bf, ifa, rf, ctx)).
+(* Authentication: VRP only accepts if Attester legitimately initiated *)
+query bf: BindingFactor, ifa: InstanceFactor, rf: RenewalFactor, ctx: CertificateRequestContext;
+      inj-event(VRPAcceptsRenewal(bf, ifa, rf, ctx)) ==> inj-event(AttesterAnswersChallenge(bf, ifa, rf, ctx)).
 
-(* Freshness: Attester only uses contexts generated by Verifier 
+(* Freshness: Attester only uses contexts generated by VRP *)
 query ctx: CertificateRequestContext;
-      event(AttesterUsesContext(ctx)) ==> event(VerifierGeneratesContext(ctx)).
+      event(AttesterUsesContext(ctx)) ==> event(VRPGeneratesContext(ctx)).
 
-(* RF Integrity: Valid RF was presented by legitimate Attester 
-query rf: RenewalFactor, bf: BootFactor, ifa: InstanceFactor, ctx: CertificateRequestContext;
-      event(ValidRFVerified(rf)) ==> event(AttesterInitiatesRenewal(bf, ifa, rf, ctx)).
+(* RF Integrity: Valid RF was presented by legitimate Attester *)
+query rf: RenewalFactor, bf: BindingFactor, ifa: InstanceFactor, ctx: CertificateRequestContext;
+      event(ValidRFVerified(rf)) ==> event(AttesterAnswersChallenge(bf, ifa, rf, ctx)).
 
 (* Measurement Freshness: Fresh measurements were provided in response to context *)
 query ifa: InstanceFactor, ctx: CertificateRequestContext;
@@ -149,23 +173,27 @@ query ifa: InstanceFactor, ctx: CertificateRequestContext;
 process
     new instanceFactor: InstanceFactor;
     new renewalFactor: RenewalFactor;
-    new verifierKey: PrivateKey;
+    new vrpKey: PrivateKey;
     (
-        AttesterProcessRenewal(bootFactor, instanceFactor, renewalFactor, pk(verifierKey))
+        AttesterProcessRenewal(bindingFactor, instanceFactor, renewalFactor, pk(vrpKey))
         |
-        VerifierProcessRenewal(bootFactor, instanceFactor, renewalFactor, verifierKey)
+        VRPProcessRenewal(bindingFactor, instanceFactor, renewalFactor, vrpKey)
     )
     
 (*
 Expected Results (all should now be TRUE):
 
-Query inj-event(VerifierAcceptsRenewal(bf,ifa,rf,ctx)) ==> inj-event(AttesterInitiatesRenewal(bf,ifa,rf,ctx)) is true.
-Query event(AttesterUsesContext(ctx)) ==> event(VerifierGeneratesContext(ctx)) is true.
-Query event(ValidRFVerified(rf)) ==> event(AttesterInitiatesRenewal(bf,ifa,rf,ctx)) is true.
-Query event(FreshMeasurementsVerified(ifa)) ==> event(AttesterUsesContext(ctx)) is true.
+Query inj-event(VRPAcceptsRenewal(bf_1,ifa_1,rf_1,ctx)) ==> inj-event(AttesterAnswersChallenge(bf_1,ifa_1,rf_1,ctx)) is true.
+Query event(AttesterUsesContext(ctx)) ==> event(VRPGeneratesContext(ctx)) is true.
+Query event(ValidRFVerified(rf_1)) ==> event(AttesterAnswersChallenge(bf_1,ifa_1,rf_1,ctx)) is true.
+Query event(FreshMeasurementsVerified(ifa_1)) ==> event(AttesterUsesContext(ctx)) is true.
 
-Author's Address:
-  Nathanael Ritz
-  Independent
-  nathanritz@gmail.com
+Authors' Addresses
+Nathanael Ritz
+Independent
+Email: nathanritz@gmail.com
+
+Muhammad Usama Sardar
+TU Dresden
+Email: muhammad_usama.sardar@tu-dresden.de
 *)
