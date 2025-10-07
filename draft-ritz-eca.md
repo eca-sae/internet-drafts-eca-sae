@@ -170,8 +170,6 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 **Procedure Binding:** The Instance Factor (IF) MUST be bound to the a unique identifier (e.g., the `eca_uuid` for ECA bootstrap) to ensure freshness and prevent replay.
 
-**Artifact Repository:** A simple, addressable store (e.g., a web server, an object store) where peers can publish and retrieve cryptographic artifacts in SAE-based deployments.
-
 # Conceptual Model (Informational) {#conceptual-model}
 
 The ECA protocol defines a unified pattern for the attestation lifecycle through two distinct but related attestation procedures. A compute instance without a verifiable identity can be bootstrapped on Day 0 to obtain a verifiable identity, and then use that verifiable identity for efficient attestation renewal on an ongoing basis.
@@ -532,28 +530,6 @@ While ECA is designed to be composable (e.g., chaining attestations), realizing 
 
 **Organizational Friction:** In multi-team environments, clear ownership of the end-to-end attestation process is critical. Without a shared governance model, configuration drift between what DevOps provisions, what Security expects, and what the application implements can lead to systemic failures.
 
-# Transport Considerations {#transport-considerations}
-
-The ECA protocol is transport-agnostic. It can be deployed over any mechanism that supports artifact exchange, freshness guarantees, and immutability of published artifacts. This section provides non-normative guidance on transport selection.
-
-## Identity Bootstrap Procedure Transports {#bootstrap-transports}
-
-**Static Artifact Exchange (SAE)** [@I-D.ritz-sae] is RECOMMENDED for identity bootstrap procedures in constrained environments, such as those without direct network connectivity or in zero-trust networks. Its pull-only, repository-based model minimizes the attack surface. Other transports like direct HTTP/HTTPS or message queues MAY be used.
-
-## Attestation Renewal Transports {#attestation renewal-transports}
-
-**TLS 1.3 Exported Authenticators** [@?RFC9261] with the `cmw_attestation` extension [@?I-D.fossati-tls-exported-attestation] are RECOMMENDED for attestation renewal in interactive services requiring per-connection freshness, such as long-running TEE-based workloads. This provides a single round-trip attestation renewal cryptographically bound to the TLS session.
-
-## Transport Selection Guidance {#transport-selection-guidance}
-
-| Scenario             | Bootstrap     | Re-attestation |
-| :------------------- | :------------ | :------------- |
-| **Zero-trust cloud** | SAE           | (D)TLS         |
-| **Bare-metal** | SAE           | SAE or (D)TLS  |
-| **TEE services** | SAE or (D)TLS | (D)TLS         |
-| **Air-gapped** | SAE           | SAE            |
-| **Embedded/IoT** | Custom        | Custom         |
-
 # Security Considerations {#security-considerations}
 
 This section addresses security properties and considerations for ECA attestation procedures.
@@ -681,7 +657,7 @@ TODO IANA
 
 # Implementation Status {#implementation-status}
 
-An end-to-end implementation of the bootstrap profile is publicly available at [[ECA-SAE-PROTOTYPE](#ext-links)], demonstrating the three-phase attestation procedure, HPKE-based challenge delivery, COSE-based Evidence, and SAE transport. The reference implementation achieves protocol execution in approximately 1.3 seconds.
+An end-to-end implementation of the bootstrap profile is publicly available at [[ECA-SAE-PROTOTYPE](#ext-links)], demonstrating the three-phase attestation procedure, HPKE-based challenge delivery, COSE-based Evidence, and SAE [@?I-D.ritz-sae] transport. The reference implementation achieves protocol execution in approximately 1.3 seconds.
 
 # Acknowledgments {#acknowledgments}
 
@@ -749,11 +725,7 @@ A test was conducted modeling a compromised long-term Verifier signing key:
   - Wrong PoP tag (fails Gate 10)
   - No correctly implemented Verifier should accept this Evidence
 
-Furthermore, when using SAE transport [@I-D.ritz-sae], even this DoS attack becomes infeasible without repository write access, as noted in [](#with-sae-transport-pull-only-model).
-
-- **Mitigation:** This analysis provides the formal rationale for:
-  - the requirement in [](#with-direct-communication-transports) for ephemeral keys with push-capable transports
-  - the relaxed guidance in [](#with-sae-transport-pull-only-model) when using SAE transport
+- **Mitigation:** This analysis provides the formal rationale for ephemeral keys for each unique bootstrapping procedure
 
 ### Attester State Reveal {#attester-state-reveal}
 
@@ -876,7 +848,7 @@ This appendix provides a complete example of attestation renewal for a long-runn
 
 We consider Server as Attester.
 - Client establishes initial TLS 1.3 connection to TEE-based service
-- Service performed bootstrap via ECA/SAE during provisioning
+- Service performed bootstrap via ECA during provisioning
 - Client needs to verify TEE health before processing sensitive data
 - Service presents current measurements via attestation renewal
 
@@ -956,6 +928,8 @@ This revision represents a significant architectural evolution of the ECA protoc
     * **Instance Factor Patterns (IFP):** The Hardware-Rooted (A), Orchestrator-Provisioned (B), and Artifact-Based (C) patterns are now formally part of the core draft.
     * **Reference Profile and Examples:** A concrete reference profile (`ECA-VM-BOOTSTRAP-V1`) and a detailed (D)TLS example have been included as appendices.
     * **Implementation Status:** The section detailing the prototype's status is now included.
+
+* **Removed SAE from RECOMMENDED or normative transport requirements. Formal modeling and validation demonstrates that SAE is not required to maintain the security properties inherent in the logic of the applied cryptography.
 
 ### Scope and Terminology Refinements
 
