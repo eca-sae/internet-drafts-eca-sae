@@ -166,7 +166,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 **Integrity Hash Beacon (IHB):** A SHA-256 binding of `BF` to `IF` that enables exposure-tolerant authentication while preventing pre-computation attacks to mitigate MiTM threats.
 
-**Exchange Identifier (eca_uuid):** A unique identifier for each attestation lifecycle instance, used to construct artifact repository paths and prevent replay attacks in SAE-based deployments.
+**Exchange Identifier (eca_uuid):** A unique identifier for each attestation lifecycle instance, used to construct artifact repository paths.
 
 **Procedure Binding:** The Instance Factor (IF) MUST be bound to the a unique identifier (e.g., the `eca_uuid` for ECA bootstrap) to ensure freshness and prevent replay.
 
@@ -301,7 +301,7 @@ The Verifier enforces a sequence of fail-closed validation gates in a specific o
 1.  **MAC Verification:** Verifies the integrity of the Phase-1 payload using an HMAC tag derived from `BF` and `IF`.
     -   Failure Action: Immediate termination. Publish error status `MAC_INVALID`.
 
-2.  **Instance Authorization:** Checks if the Attester's identity (e.g., derived from a unique attestation identifier or Instance Factor) is authorized to proceed.
+2.  **Instance Authorization:** Checks if the Attester's identity (e.g., derived from a unique Exchange Identifier or Instance Factor) is authorized to proceed.
     -   Failure Action: Immediate termination. Publish error status `ID_MISMATCH`.
 
 3.  **IHB Validation:** Confirms that the received Integrity Hash Beacon (IHB) matches the expected value for the authorized instance.
@@ -330,7 +330,7 @@ The Verifier enforces a sequence of fail-closed validation gates in a specific o
 10. **PoP Validation:** Verifies the final Proof-of-Possession tag, confirming the Attester's knowledge of both `BF` and `VF`.
     -   Failure Action: Immediate termination. Publish error status `POP_INVALID`.
 
-11. **Identity Uniqueness (Replay):** Persists the terminal state for the unique attestation identifier and rejects any future attempts to use it.
+11. **Identity Uniqueness (Replay):** Persists the terminal state for the unique Exchange Identifier and rejects any future attempts to use it.
     - Failure Action: Immediate termination. Publish error status `IDENTITY_REUSE`.
 
 These gates align with the formal model's events (see [](#core-security-properties-bootstrap-model)):
@@ -389,20 +389,6 @@ These gates align with the formal model's events (see [](#core-security-properti
 # Attestation Renewal Specification {#attestation-renewal-specification}
 
 This section specifies the attestation renewal procedures for instances that possess an existing credential (a Renewal Factor) from a prior attestation.
-
-~~~
-    Attester                  Verifier           Verifying Relying Party
- (TEE-Based Server)       (Attestation Service)  (Client Application)
-      |                           |                       |
-      |----- Evidence ----------->|                       |
-      |(HW RoT Quote/Measurements)|..Appraise vs. Policy..|
-      |                           |(e.g., CORiM validation)
-      |<--- Attestation Result ---|                       |
-      |                                                   |
-      |--------------------- Attestation Result --------->|
-      | (bound to session)                                |
-      |<--------------------- Policy Decision ------------|
-~~~
 
 ## Prerequisites {#Attestation Renewal Procedures-prerequisites}
 
@@ -491,7 +477,7 @@ Repository structure:
 Implementations using other transports MUST ensure:
 
 -   RF signature verification
--   Attestation procedure identifier uniqueness (replay protection)
+-   Exchange Identifier uniqueness (replay protection)
 -   IF freshness (e.g., timestamps, nonces, or context binding)
 -   Integrity protection of Evidence payload
 
@@ -599,7 +585,7 @@ Re-attestation security derives from:
 1.  **Bootstrap foundation**: The initial credential established via a cryptographically verified bootstrap acts as the Renewal Factor (RF).
 2.  **Transport security**: Channel properties (e.g., TLS 1.3 forward secrecy).
 3.  **Continuous appraisal**: Fresh IF measurements validated against policy.
-4.  **Replay protection**: Attestation procedure identifier uniqueness enforcement.
+4.  **Replay protection**: Exchange Identifier uniqueness enforcement.
 
 **Note**: Unlike identity bootstrap procedures, attestation renewal does NOT protect against initial identity forgery. If an attacker compromises the identity bootstrap procedure, they can obtain a valid `RF` and perform subsequent attestation renewals. Therefore, security of the identity bootstrap procedure (including a hardware-rooted IF for zero-trust scenarios) remains critical for overall system security.
 
@@ -788,7 +774,7 @@ A test was conducted modeling a compromised Attester whose ephemeral private dec
 - Hash / KDF: HKDF-SHA-256 (RFC5869), SHA-256 (RFC6234)
 - MAC: HMAC-SHA-256
 - Signatures: Ed25519 (RFC8032)
-- KEM/HPKE: X25519 + HPKE base mode (RFC9180) for Verifier -> Attester secrecy in Phase 2. The attestation procedure identifier is used as the AAD, and the `info` parameter for key derivation is `"ECA/v1/hpke"`.
+- KEM/HPKE: X25519 + HPKE base mode (RFC9180) for Verifier -> Attester secrecy in Phase 2. The Exchange Identifier is used as the AAD, and the `info` parameter for key derivation is `"ECA/v1/hpke"`.
 - Nonces: Verifier freshness `vnonce` is exactly 16 bytes (encoded base64url, unpadded)
 
 ## Integrity Hash Beacon (IHB) {#integrity-hash-beacon-ihb}
@@ -797,7 +783,7 @@ A test was conducted modeling a compromised Attester whose ephemeral private dec
 
 ## Deterministic Key Material {#deterministic-key-material}
 
-All keys are deterministically derived from attestation procedure inputs via domain-separated HKDF invocations. Notation: `HKDF-Extract(salt, IKM)` then `HKDF-Expand(PRK, info, L)`. The attestation procedure identifier is appended to the `salt` in all derivations to ensure session uniqueness.
+All keys are deterministically derived from attestation procedure inputs via domain-separated HKDF invocations. Notation: `HKDF-Extract(salt, IKM)` then `HKDF-Expand(PRK, info, L)`. The Exchange Identifier is appended to the `salt` in all derivations to ensure session uniqueness.
 
 - **Phase 1 MAC key (Attester artifact MAC)**
 
@@ -875,7 +861,7 @@ The Phase-3 payload is a signed EAT as defined in [](#evidence-claims). The prof
 - Verify the signed Phase-2 payload with the Verifier's public key; HPKE-Open with Attester's kem key to recover `{VF, vnonce}`.
 - Recompute Attester signing key from `BF||VF` and verify the EAT signature.
 - Recompute `jp_proof` and `pop_tag` inputs and compare constant-time.
-- Apply local appraisal policy; on success, emit an Attestation Result bound to attestation procedure identifier.
+- Apply local appraisal policy; on success, emit an Attestation Result bound to the Exchange Identifier.
 
 ## Interop Notes {#interop-notes}
 
