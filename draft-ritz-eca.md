@@ -30,9 +30,9 @@ status = "experimental"
 
 .# Abstract
 
-Heterogenous workloads across multi-cloud, bare-metal, and edge environments often lack verifiable identities, relying instead on pre-shared secrets that enable impersonation if intercepted. Concurrently, Trusted Execution Environments (TEEs) and other high-assurance workloads are limited to single point-in-time attestation when they otherwise require continuous verification of platform trustworthiness throughout long-running sessions.
+When distributing complex workloads across diverse service providers, a platform-agnostic identity bound to verifiable proof enables operators to decouple access control from underlying infrastructure without compromising security postures. Likewise, it may be desirable to challenge any long-running workload to a dynamic health check in order to maintain assurances of its trustworthiness over time.
 
-This document specifies Entity and Compute Attestation (ECA), a protocol that profiles RATS architecture to address both challenges. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish an emergent and cryptographically verifiable identity for ephemeral workloads through proof of joint possession without the use of secrets like bearer tokens. The protocol also defines an attestation renewal procedure providing single round-trip verification bound to (D)TLS sessions via TLS Exported Authenticators that directly enables continuous attestation over time. ECA is designed as a supporting component for frameworks like WIMSE and to enhance related projects such as SPIFFE/SPIRE. The security properties of both procedures have been formally analyzed (see Appendix A). 
+This document specifies Entity and Compute Attestation (ECA), a formaly modelled protocol that profiles RATS architecture to address both needs. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish an emergent and cryptographically verifiable identity without the use of shared secrets like bearer tokens. The protocol also defines a lightweight attestation renewal procedure that operates over single round-trip bound to (D)TLS sessions via TLS-EA, enabling operators to continually verify high-assurance workloads, such as those running inside Trusted Execution Environments (TEEs). ECA is designed as a supporting component for frameworks like WIMSE and to enhance related projects such as SPIFFE/SPIRE. The security properties of both procedures have been formally analyzed (see Appendix A).
 
 {mainmatter}
 
@@ -249,7 +249,7 @@ This specification's **attestation renewal procedure** directly implements the p
 | **No core (D)TLS modifications** | Only `cmw_attestation` extension |
 | **Mutual attestation support** | Symmetric client/server attestation procedures |
 
-## The SPIFFE/SPIRE Framework {\#the-spiffespire-framework}
+## The SPIFFE/SPIRE Framework {#the-spiffespire-framework}
 
 The ECA protocol is designed to complement and enhance the SPIFFE/SPIRE framework by providing a standardized, interactive protocol for node attestation. SPIFFE/SPIRE's extensible node attestor architecture provides a clear integration path for new attestation methods, and ECA offers a mechanism specifically designed for environments where provider metadata is insufficient or unavailable.
 
@@ -310,36 +310,36 @@ The Verifier enforces a sequence of fail-closed validation gates in a specific o
 ### Phase 1 Appraisal Gates (Bootstrap)
 
 1.  **MAC Verification:** Verifies the integrity of the Phase-1 payload using an HMAC tag derived from `BF` and `IF`.
-    -   Failure Action: Immediate termination. Publish error status `MAC_INVALID`.
+    - Failure Action: Immediate termination. Publish error status `MAC_INVALID`.
 
 2.  **Instance Authorization:** Checks if the Attester's identity (e.g., derived from a unique Exchange Identifier or Instance Factor) is authorized to proceed.
-    -   Failure Action: Immediate termination. Publish error status `ID_MISMATCH`.
+    - Failure Action: Immediate termination. Publish error status `ID_MISMATCH`.
 
 3.  **IHB Validation:** Confirms that the received Integrity Hash Beacon (IHB) matches the expected value for the authorized instance.
-    -   Failure Action: Immediate termination. Publish error status `IHB_MISMATCH`.
+    - Failure Action: Immediate termination. Publish error status `IHB_MISMATCH`.
 
 4.  **KEM Public Key Match:** Ensures the ephemeral encryption public key in the payload matches the expected key for the session.
-    -   Failure Action: Immediate termination. Publish error status `KEM_MISMATCH`.
+    - Failure Action: Immediate termination. Publish error status `KEM_MISMATCH`.
 
 ### Phase 3 Appraisal Gates (Bootstrap)
 
 5.  **Evidence Time Window:** Validates that the `iat`, `nbf`, and `exp` claims in the final EAT are within an acceptable time skew (e.g., ±60 seconds).
-    -   Failure Action: Immediate termination. Publish error status `TIME_EXPIRED`.
+    - Failure Action: Immediate termination. Publish error status `TIME_EXPIRED`.
 
 6.  **EAT Schema Compliance:** Checks that the EAT contains all required claims with the correct types and encodings.
-    -   Failure Action: Immediate termination. Publish error status `SCHEMA_ERROR`.
+    - Failure Action: Immediate termination. Publish error status `SCHEMA_ERROR`.
 
 7.  **EAT Signature:** Verifies the Ed25519 signature on the EAT using the public key derived from `BF` and `VF`.
-    -   Failure Action: Immediate termination. Publish error status `SIG_INVALID`.
+    - Failure Action: Immediate termination. Publish error status `SIG_INVALID`.
 
 8.  **Nonce Match:** Ensures the nonce in the EAT matches the nonce the Verifier issued in Phase 2, proving freshness.
-    -   Failure Action: Immediate termination. Publish error status `NONCE_MISMATCH`.
+    - Failure Action: Immediate termination. Publish error status `NONCE_MISMATCH`.
 
 9.  **JP Validation:** Verifies the Joint Possession proof, ensuring the final identity key is bound to the attestation procedure context.
-    -   Failure Action: Immediate termination. Publish error status `KEY_BINDING_INVALID`.
+    - Failure Action: Immediate termination. Publish error status `KEY_BINDING_INVALID`.
 
 10. **PoP Validation:** Verifies the final Proof-of-Possession tag, confirming the Attester's knowledge of both `BF` and `VF`.
-    -   Failure Action: Immediate termination. Publish error status `POP_INVALID`.
+    - Failure Action: Immediate termination. Publish error status `POP_INVALID`.
 
 11. **Identity Uniqueness (Replay):** Persists the terminal state for the unique Exchange Identifier and rejects any future attempts to use it.
     - Failure Action: Immediate termination. Publish error status `IDENTITY_REUSE`.
@@ -405,7 +405,7 @@ This section specifies the attestation renewal procedures for instances that pos
 
 A formal model for this procedure and its proved security properties are provided. See []{#core-security-properties-renewal-model}
 
-## Prerequisites {#Attestation Renewal Procedures-prerequisites}
+## Prerequisites {#attestation-renewal-prerequisites}
 
 -   The instance possesses a Renewal Factor (RF).
 -   The Verifying Relying Party (VRP) has a record of the expected identity associated with the `RF`.
@@ -434,19 +434,19 @@ The attestation renewal procedure is a single-phase exchange.
 These gates align with the formal model's events (see []{#core-security-properties-renewal-model}).
 
 1.  **RF Signature Verification**: Validates credential authenticity
-    -   Failure: `CREDENTIAL_INVALID`
+    - Failure: `CREDENTIAL_INVALID`
 
 2.  **Identity Continuity**: Confirms RF subject matches expected identity
-    -   Failure: `IDENTITY_MISMATCH`
+    - Failure: `IDENTITY_MISMATCH`
 
 3.  **Measurement Appraisal**: Verifies IF against policy (e.g., CoRIM)
-    -   Failure: `MEASUREMENT_REJECTED`
+    - Failure: `MEASUREMENT_REJECTED`
 
 4.  **Freshness Binding**: Ensures attestation_procedure_id is unique and properly bound
-    -   Failure: `REPLAY_DETECTED` or `BINDING_INVALID`
+    - Failure: `REPLAY_DETECTED` or `BINDING_INVALID`
 
 5.  **Timestamp Validation**: Confirms Evidence timestamp within acceptable window
-    -   Failure: `TIME_EXPIRED`
+    - Failure: `TIME_EXPIRED`
     
 ### Transport-Specific Implementations {#attestation-renewal-transport-specific}
 
@@ -920,50 +920,6 @@ Client                              Server (TEE)
 - Prevents replay of old Quotes across sessions
 
 This concrete flow is the reference for the renewal ProVerif model (`REPORTDATA = SHA-256(certificate_request_context)`), see []{#core-security-properties-renewal-model}.
-
-# SAE Transport Profile {#sae-transport-profile}
-
-> Note: This appendix provides a non-normative summary of SAE integration. For the normative SAE specification, see [@I-D.ritz-sae].
-
-## Repository Requirements {#repository-requirements}
-
-- Strong read-after-write consistency
-- Immutable artifact storage
-- Access control for write operations
-- Support for HEAD/GET operations
-
-## Artifact Lifecycle {#artifact-lifecycle}
-
-### Bootstrap Ceremony {#bootstrap-ceremony-sae}
-
-Full three-phase ceremony as defined in [](#protocol-overview):
-
-**Repository Structure:**
-```
-/<eca_uuid>/phase1.cbor
-/<eca_uuid>/phase1.hmac
-/<eca_uuid>/phase2.cbor
-/<eca_uuid>/phase2.sig
-/<eca_uuid>/phase3.eat
-/<eca_uuid>/phase3.sig
-/<eca_uuid>/status
-```
-
-### Re-attestation Ceremony {#re-attestation-ceremony-sae}
-
-Simplified single-phase exchange:
-
-**Repository Structure:**
-```
-/<eca_uuid>/evidence.eat
-/<eca_uuid>/evidence.sig
-/<eca_uuid>/result.ar
-/<eca_uuid>/status
-```
-
-## Accept-Once Enforcement {#accept-once-enforcement}
-
-Verifiers MUST maintain persistent storage tracking accepted `eca_uuid` values. Recommended minimum retention: AR validity period + clock skew tolerance.
 
 # EAT profiles {#app-evidence-profiles}
 
