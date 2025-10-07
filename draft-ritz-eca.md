@@ -347,10 +347,14 @@ These gates align with the formal model's events (see [](#core-security-properti
 
 ## Phase 2: Challenge and Validator Factor Release {#phase-2-challenge-and-validator-factor-release}
 
--   **Verifier** generates a fresh `VF` (≥128 bits) and a 16-byte nonce.
--   Encrypts `{VF, nonce}` using HPKE to the Attester's ephemeral public key.
--   Signs the encrypted payload with its Ed25519 key and publishes it to the repository.
--   **Attester** retrieves the published payload, verifies its authenticity, and decrypts the `VF`.
+- **Verifier** generates:
+  - A fresh `VF` (≥128 bits) 
+  - A 16-byte nonce
+  - A fresh ephemeral Ed25519 keypair for this specific bootstrap procedure
+- Encrypts `{VF, nonce}` using HPKE to the Attester's ephemeral public key
+- Signs the encrypted payload with the ephemeral procedure key (the Verifier's long-term identity key MUST NOT be used)
+- Publishes the signed payload and the ephemeral public key to the repository
+- **Attester** retrieves the published payload, verifies the signature using the published ephemeral public key, and decrypts the `VF`
 
 ## Phase 3: Joint Possession Proof {#phase-3-joint-possession-proof}
 
@@ -377,9 +381,9 @@ These gates align with the formal model's events (see [](#core-security-properti
 | :------------------------ | :--------------------------------------- | :------------------------ |
 | `INIT`                    | New attestation lifecycle.               | `AWAITING_ATTESTER_PROOF` |
 | `AWAITING_ATTESTER_PROOF` | Phase 1 artifacts retrieved and validated. | `PROVING_TO_ATTESTER`     |
-| `PROVING_TO_ATTESTER`     | Phase 2 artifacts published.             | `AWAITING_EVIDENCE`       |
+| `PROVING_TO_ATTESTER`     | Sign Phase 2 with ephemeral key.            | `AWAITING_EVIDENCE`       |
 | `AWAITING_EVIDENCE`       | Phase 3 artifacts retrieved.             | `VALIDATING`              |
-| `VALIDATING`              | Appraisal results pass.                  | `SUCCESS`                 |
+| `VALIDATING`              | Sign final AR with long-term identity key   | `SUCCESS`                 |
 | Any                       | Any validation check fails or timeout.   | `FAIL`                    |
 
 # Attestation Renewal Specification {#attestation-renewal-specification}
@@ -387,7 +391,7 @@ These gates align with the formal model's events (see [](#core-security-properti
 This section specifies the attestation renewal procedures for instances that possess an existing credential (a Renewal Factor) from a prior attestation.
 
 ~~~
-   Attester                  Verifier           Verifying Relying Party
+    Attester                  Verifier           Verifying Relying Party
  (TEE-Based Server)       (Attestation Service)  (Client Application)
       |                           |                       |
       |----- Evidence ----------->|                       |
@@ -621,15 +625,45 @@ This result establishes the protocol's security boundary regarding the Attester'
 
 ## Verifier Key Compromise Impact Analysis {#verifier-key-compromise-impact-analysis}
 
-The security impact of a compromised Verifier signing key depends on the attestation procedure type and transport mechanism.
+The Verifier uses two distinct types of keys in the identity bootstrap procedure:
 
-### With SAE Transport (Pull-Only Model) {#with-sae-transport-pull-only-model}
+1. **Ephemeral Procedure Key**: Used to sign Phase 2 artifacts (`VF` + `vnonce`)
+2. **Long-term Identity Key**: Used to sign final Attestation Results (`AR`)
 
-When using the Static Artifact Exchange (SAE) protocol [@I-D.ritz-sae], the compromise of a Verifier's long-term signing key is limited to a denial-of-service impact. An attacker with the key cannot inject forged Phase 2 artifacts into the attestation procedure without also gaining write access to the secure artifact repository. Any Evidence produced by an Attester based on attacker-controlled inputs would fail appraisal at a legitimate Verifier because the cryptographic bindings would be invalid (e.g., Gates 8, 9, and 10 would fail).
+## Key Management Requirements {#key-management-requirements}
 
-### With Direct Communication Transports {#with-direct-communication-transports}
+### Ephemeral Procedure Keys
 
-For implementations using direct peer-to-peer communication (e.g., HTTP/HTTPS), the formal model ([](#verifier-key-compromise)) demonstrates that a compromised long-term Verifier key allows an attacker to inject forged (`VF'`, `nonce'`) pairs, breaking the formal Freshness property. While the attestation procedure would still fail authentication at a legitimate Verifier, the potential for denial-of-service attacks justifies mandatory use of ephemeral keys in these scenarios. Therefore, ephemeral per-procedure Verifier keys are normatively mandated (MUST) when not using SAE or an equivalent pull-only, repository-based transport.
+- MUST be generated fresh for each identity bootstrap procedure
+- MUST be discarded after procedure completion
+- SHOULD use Ed25519 for performance and security
+
+#### Ephemeral Procedure Key Compromise
+
+The Verifier MUST generate a fresh ephemeral keypair for each identity bootstrap procedure to sign Phase 2 artifacts. This key is single-use and discarded after the procedure completes.
+
+If an ephemeral procedure key is compromised during an active bootstrap procedure, an attacker could:
+- Inject forged (VF', nonce') pairs for that specific procedure
+- Cause the Attester to derive incorrect final identity keys
+
+However, the protocol's cryptographic design ensures this only enables denial of service, not authentication bypass:
+- The resulting Evidence will contain wrong nonce (fails Gate 8)
+- Wrong JP proof (fails Gate 9)  
+- Wrong PoP tag (fails Gate 10)
+- No legitimate Verifier should accept this Evidence
+
+### Long-term Identity Keys  
+
+- MUST be protected as high-value assets
+- MUST be used only to sign final Attestation Results
+- SHOULD be rotated according to organizational policy
+- MAY be backed by organizational PKI for trust distribution
+
+#### Long-term Identity Key Compromise
+
+Compromise of the Verifier's long-term identity key used to sign Attestation Results would allow an attacker to forge ARs. This represents a complete compromise of the trust domain and requires immediate revocation and reissuance of the Verifier's identity credentials.
+
+The impact is independent of transport mechanism and affects all relying parties that trust the compromised key.
 
 # Non-Goals {#non-goals}
 
