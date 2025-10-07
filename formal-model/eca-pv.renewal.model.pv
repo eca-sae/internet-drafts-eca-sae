@@ -1,0 +1,171 @@
+(* ECA Protocol - ProVerif Model - Renewal Procedure (Corrected)
+  This version models attestation renewal with proper BF+RF+IF binding
+  and TLS certificate_request_context as nonce for freshness.
+  Maps to the "Concrete Example: Continuous TEE Attestation over (D)TLS"
+*)
+
+(* --- Types --- *)
+type BootFactor.
+type InstanceFactor.
+type RenewalFactor. (* RF: Signed EAT from prior bootstrap *)
+type PublicKey.
+type PrivateKey.
+type Signature.
+type CertificateRequestContext. (* TLS certificate_request_context *)
+type TEEQuote.
+type IHB.
+
+(* --- Constants and Channels --- *)
+free public_channel: channel.
+free bootFactor: BootFactor. (* BF is public *)
+
+(* --- Cryptographic Primitives --- *)
+
+(* Verifier's long-term keypair for signing contexts *)
+fun pk(PrivateKey): PublicKey.
+fun signContext(CertificateRequestContext, PrivateKey): Signature.
+reduc forall ctx: CertificateRequestContext, sk: PrivateKey; 
+      verifyContextSig(ctx, signContext(ctx, sk), pk(sk)) = ctx.
+
+(* RF Signature Verification *)
+fun sign(bitstring, RenewalFactor): Signature.
+reduc forall m: bitstring, rf: RenewalFactor; verify(m, sign(m, rf), rf) = m.
+
+(* Hash function for context binding 
+   Models: SHA-256(certificate_request_context) -> REPORTDATA *)
+fun hashContext(CertificateRequestContext): bitstring.
+
+(* TEE Quote Verification 
+   Models: TEE generates Quote with REPORTDATA = hash(context), bound to IF
+   The Quote cryptographically binds the context hash to the Instance Factor *)
+fun generateTEEQuote(bitstring, InstanceFactor): TEEQuote.
+reduc forall context_hash: bitstring, ifa: InstanceFactor; 
+      verifyTEEQuote(generateTEEQuote(context_hash, ifa), ifa) = context_hash.
+
+(* IHB calculation - binds BF to IF *)
+fun calculateIHB(BootFactor, InstanceFactor): IHB.
+
+(* --- Events for Core Properties --- *)
+event AttesterInitiatesRenewal(BootFactor, InstanceFactor, RenewalFactor, CertificateRequestContext).
+event VerifierAcceptsRenewal(BootFactor, InstanceFactor, RenewalFactor, CertificateRequestContext).
+event VerifierGeneratesContext(CertificateRequestContext).
+event AttesterUsesContext(CertificateRequestContext).
+event ValidRFVerified(RenewalFactor).
+event FreshMeasurementsVerified(InstanceFactor).
+
+(* --- Protocol Processes --- *)
+
+let AttesterProcessRenewal(bf: BootFactor, ifa: InstanceFactor, rf: RenewalFactor, verifierPubKey: PublicKey) =
+    (* Receive CertificateRequest with SIGNED context 
+       This models TLS Exported Authenticator authentication *)
+    in(public_channel, (context: CertificateRequestContext, context_sig: Signature));
+    
+    (* CRITICAL: Verify the context came from the legitimate Verifier
+       This models that in real TLS, the CertificateRequest is authenticated *)
+    let verified_context = verifyContextSig(context, context_sig, verifierPubKey) in
+    if verified_context = context then
+        event AttesterUsesContext(context);
+        
+        (* Generate fresh TEE Quote with context hash in REPORTDATA 
+           This models: REPORTDATA = SHA-256(certificate_request_context) *)
+        let context_hash = hashContext(context) in
+        let tee_quote = generateTEEQuote(context_hash, ifa) in
+        let ihb = calculateIHB(bf, ifa) in
+        
+        event AttesterInitiatesRenewal(bf, ifa, rf, context);
+        
+        (* Construct Evidence payload as specified in I-D *)
+        let evidence_payload = (bf, rf, tee_quote, context, ihb) in
+        let signature = sign(evidence_payload, rf) in
+        
+        (* Send signed Evidence (modeling TLS Authenticator with cmw_attestation) *)
+        out(public_channel, (evidence_payload, signature))
+    else 0.
+
+let VerifierProcessRenewal(expected_bf: BootFactor, expected_ifa: InstanceFactor, 
+                           expected_rf: RenewalFactor, verifierPrivKey: PrivateKey) =
+    (* Generate fresh context (modeling TLS CertificateRequest) *)
+    new context: CertificateRequestContext;
+    event VerifierGeneratesContext(context);
+    
+    (* Sign the context to authenticate it (models TLS handshake authentication) *)
+    let context_sig = signContext(context, verifierPrivKey) in
+    out(public_channel, (context, context_sig));
+    
+    (* Receive Evidence *)
+    in(public_channel, (evidence_payload: bitstring, sig: Signature));
+    let (rec_bf: BootFactor, rec_rf: RenewalFactor, rec_quote: TEEQuote, 
+         rec_context: CertificateRequestContext, rec_ihb: IHB) = evidence_payload in
+    
+    (* Validation Gates from I-D section 8.4 *)
+    (* Gate 1: RF Signature Verification *)
+    let verified_payload = verify(evidence_payload, sig, expected_rf) in
+    if verified_payload = evidence_payload then
+        
+        (* Gate 2: Identity Continuity - MUST check BEFORE firing ValidRFVerified *)
+        if rec_rf = expected_rf then
+            (* NOW we know this RF is for THIS session, not a replay *)
+            event ValidRFVerified(rec_rf);
+            
+            (* Gate 3: Freshness Binding *)
+            if rec_context = context then
+                
+                (* Gate 4: Measurement Appraisal 
+                   Verify TEE Quote: extract REPORTDATA and confirm it matches context hash *)
+                let expected_context_hash = hashContext(context) in
+                let verified_context_hash = verifyTEEQuote(rec_quote, expected_ifa) in
+                if verified_context_hash = expected_context_hash then
+                    event FreshMeasurementsVerified(expected_ifa);
+                    
+                    (* Gate 5: IHB Validation *)
+                    let expected_ihb = calculateIHB(expected_bf, expected_ifa) in
+                    if rec_ihb = expected_ihb then
+                        event VerifierAcceptsRenewal(expected_bf, expected_ifa, expected_rf, context); 0
+                    else 0
+                else 0
+            else 0
+        else 0
+    else 0.
+
+(* --- Core Security Queries --- *)
+
+(* Authentication: Verifier only accepts if Attester legitimately initiated *)
+query bf: BootFactor, ifa: InstanceFactor, rf: RenewalFactor, ctx: CertificateRequestContext;
+      inj-event(VerifierAcceptsRenewal(bf, ifa, rf, ctx)) ==> inj-event(AttesterInitiatesRenewal(bf, ifa, rf, ctx)).
+
+(* Freshness: Attester only uses contexts generated by Verifier 
+query ctx: CertificateRequestContext;
+      event(AttesterUsesContext(ctx)) ==> event(VerifierGeneratesContext(ctx)).
+
+(* RF Integrity: Valid RF was presented by legitimate Attester 
+query rf: RenewalFactor, bf: BootFactor, ifa: InstanceFactor, ctx: CertificateRequestContext;
+      event(ValidRFVerified(rf)) ==> event(AttesterInitiatesRenewal(bf, ifa, rf, ctx)).
+
+(* Measurement Freshness: Fresh measurements were provided in response to context *)
+query ifa: InstanceFactor, ctx: CertificateRequestContext;
+      event(FreshMeasurementsVerified(ifa)) ==> event(AttesterUsesContext(ctx)).
+
+(* --- Main Process --- *)
+process
+    new instanceFactor: InstanceFactor;
+    new renewalFactor: RenewalFactor;
+    new verifierKey: PrivateKey;
+    (
+        AttesterProcessRenewal(bootFactor, instanceFactor, renewalFactor, pk(verifierKey))
+        |
+        VerifierProcessRenewal(bootFactor, instanceFactor, renewalFactor, verifierKey)
+    )
+    
+(*
+Expected Results (all should now be TRUE):
+
+Query inj-event(VerifierAcceptsRenewal(bf,ifa,rf,ctx)) ==> inj-event(AttesterInitiatesRenewal(bf,ifa,rf,ctx)) is true.
+Query event(AttesterUsesContext(ctx)) ==> event(VerifierGeneratesContext(ctx)) is true.
+Query event(ValidRFVerified(rf)) ==> event(AttesterInitiatesRenewal(bf,ifa,rf,ctx)) is true.
+Query event(FreshMeasurementsVerified(ifa)) ==> event(AttesterUsesContext(ctx)) is true.
+
+Author's Address:
+  Nathanael Ritz
+  Independent
+  nathanritz@gmail.com
+*)

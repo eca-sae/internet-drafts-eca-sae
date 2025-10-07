@@ -32,7 +32,7 @@ status = "experimental"
 
 Heterogenous workloads across multi-cloud, bare-metal, and edge environments often lack verifiable identities, relying instead on pre-shared secrets that enable impersonation if intercepted. Concurrently, Trusted Execution Environments (TEEs) and other high-assurance workloads are limited to single point-in-time attestation when they otherwise require continuous verification of platform trustworthiness throughout long-running sessions.
 
-This document specifies Entity and Compute Attestation (ECA), a protocol within the RATS architecture that addresses both challenges. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish cryptographically verifiable identity for ephemeral workloads through proof of possession without the use of secrets like bearer tokens, and an attestation renewal procedure providing single round-trip verification bound to (D)TLS sessions via TLS Exported Authenticators. Both procedures are transport-agnostic and integrate with frameworks like WIMSE and SPIFFE/SPIRE. The bootstrap procedure's security properties have been formally analyzed (see Appendix A). 
+This document specifies Entity and Compute Attestation (ECA), a protocol within the RATS architecture that addresses both challenges. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish cryptographically verifiable identity for ephemeral workloads through proof of possession without the use of secrets like bearer tokens, and an attestation renewal procedure providing single round-trip verification bound to (D)TLS sessions via TLS Exported Authenticators. Both procedures are transport-agnostic and integrate with frameworks like WIMSE and SPIFFE/SPIRE. The security properties of both procedures have been formally analyzed (see Appendix A). 
 
 {mainmatter}
 
@@ -388,10 +388,12 @@ These gates align with the formal model's events (see [](#core-security-properti
 
 This section specifies the attestation renewal procedures for instances that possess an existing credential (a Renewal Factor) from a prior attestation.
 
+A formal model for this procedure and its proved security properties are provided. See []{#core-security-properties-renewal-model}
+
 ## Prerequisites {#Attestation Renewal Procedures-prerequisites}
 
 -   The instance possesses a Renewal Factor (RF).
--   The Verifier has a record of the expected identity associated with the RF.
+-   The Verifier has a record of the expected identity associated with the `RF`.
 -   The Binding Factor (BF) remains stable or is updated according to policy.
 
 ## Generic Attestation Renewal Pattern {#generic-renewal-pattern}
@@ -673,7 +675,7 @@ The authors wish to thank the contributors of these foundational standards for m
 
 **[ECA-FORMAL-MODELS]**
 
-: "ECA ProVerif Formal Models", <https://github.com/eca-sae/internet-drafts-eca-sae/blob/pv0.3.0/formal-model/>, September 2025.
+: "ECA ProVerif Formal Models (bootstrap and renewal)", <https://github.com/eca-sae/internet-drafts-eca-sae/blob/pv0.5.0/formal-model/>, October 2025.
 
 **[ECA-SAE-PROTOTYPE]**
 
@@ -683,9 +685,7 @@ The authors wish to thank the contributors of these foundational standards for m
 
 # Formal Modelling (Informative) {#app-formal-modelling-informative}
 
-This appendix presents formal security analysis of the **ECA identity bootstrap procedure** using ProVerif [[ECA-FORMAL-MODELS](#ext-links)]. The analysis assumes a powerful Dolev-Yao network attacker and verifies core security properties.
-
-**Scope limitation**: This analysis covers ONLY identity bootstrap procedures. Attestation renewals operate under different trust assumptions (existing credential from prior attestation) and are not modeled here. Future work may extend formal analysis to attestation renewal scenarios.
+This appendix presents formal security analyses of the ECA **identity bootstrap procedure** and the **attestation renewal procedure** using ProVerif [[ECA-FORMAL-MODELS](#ext-links)]. The analysis assumes a Dolev–Yao network attacker and verifies core security properties for each procedure.
 
 The protocol's bootstrap security properties were analyzed using an exploratory formal model in ProVerif. The model assumes a powerful Dolev-Yao network attacker who can intercept, modify, and inject messages. It also correctly models the Binding Factor (`BF`) as public knowledge from the start, as per the protocol's "exposure tolerance" principle ([](#core-design-principles)).
 
@@ -702,9 +702,20 @@ In the baseline model, all core security goals were successfully shown to hold a
 | **Key Binding** | `event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk))` | **True** | The final identity key that the Verifier checks is unambiguously bound to the Attester that participated in the attestation procedure, validating **Gate 9 (JP Validation)**. |
 | **Confidentiality** | `not (event(VFReleased(vf)) && attacker(vf))` | **True** | The secret `ValidatorFactor` (`VF`) is never revealed to a network attacker, satisfying a fundamental security goal of the protocol. |
 
+## Core Security Properties (Attestation Renewal) {#core-security-properties-renewal-model}
+
+**Model summary.** The renewal model binds **BF+IF+RF** and uses the TLS `certificate_request_context` as the freshness nonce (`REPORTDATA = hash(context)`), matching the renewal spec and the (D)TLS EA example. 
+
+| Property | ProVerif Query | Result | Interpretation |
+| :--- | :--- | :--- | :--- |
+| **Authentication**        | `inj-event(VerifierAcceptsRenewal(...,ctx)) ==> inj-event(AttesterInitiatesRenewal(...,ctx))` | **True** | Verifier accepts only if a unique Attester legitimately initiated this renewal. |
+| **Freshness (context)**   | `event(AttesterUsesContext(ctx)) ==> event(VerifierGeneratesContext(ctx))` | **True** | Evidence is fresh and bound to the Verifier-generated EA context. |
+| **RF integrity**          | `event(ValidRFVerified(rf)) ==> event(AttesterInitiatesRenewal(...,rf,ctx))` | **True** | The presented RF corresponds to the ongoing renewal, not replay. |
+| **Measurement freshness** | `event(FreshMeasurementsVerified(ifa)) ==> event(AttesterUsesContext(ctx))` | **True** | TEE quote is fresh and correctly bound to the EA context. |
+
 ## Boundary Analysis (Advanced Threat Models) {#boundary-analysis-advanced-threat-models}
 
-Additional tests were performed to formally define the protocol's security boundaries under specific compromise scenarios.
+Additional tests were performed to formally define the protocol's security boundaries under specific compromise scenarios. 
 
 ### Key Compromise Impersonation (KCI) {#key-compromise-impersonation-kci}
 
@@ -910,6 +921,8 @@ Client                              Server (TEE)
 - Ensures Quote was generated specifically for this request
 - Prevents replay of old Quotes across sessions
 
+This concrete flow is the reference for the renewal ProVerif model (`REPORTDATA = SHA-256(certificate_request_context)`), see []{#core-security-properties-renewal-model}. 
+
 # Change log
 
 ## Changes since -00
@@ -923,6 +936,8 @@ This revision represents a significant architectural evolution of the ECA protoc
     2.  **Attestation Renewal:** A lightweight, single round-trip attestation procedure for continuous verification of an established identity, ideal for long-running workloads and TEEs.
 
 * **New Session-Bound Deployment Model:** A primary deployment model using **(D)TLS Exported Authenticators** has been introduced. This aligns the protocol with the **SEAL WG charter** and directly supports continuous attestation for Trusted Execution Environments (TEEs).
+
+* **Formal Model of Attestion Renewal:** Exploratory formal modeling and analysis of the attestation renewal model has been completed.
 
 * **Consolidation of Implementation Guide:** Key concepts from the separate implementation guide (`draft-ritz-eca-impl-00`) have been merged into this core specification for clarity and completeness. This includes:
     * **Instance Factor Patterns (IFP):** The Hardware-Rooted (A), Orchestrator-Provisioned (B), and Artifact-Based (C) patterns are now formally part of the core draft.

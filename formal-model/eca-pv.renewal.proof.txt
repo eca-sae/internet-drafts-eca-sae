@@ -1,0 +1,133 @@
+Process 0 (that is, the initial process):
+{1}new instanceFactor: InstanceFactor;
+{2}new renewalFactor: RenewalFactor;
+{3}new verifierKey: PrivateKey;
+(
+    {4}let bf: BootFactor = bootFactor in
+    {5}let ifa: InstanceFactor = instanceFactor in
+    {6}let rf: RenewalFactor = renewalFactor in
+    {7}let verifierPubKey: PublicKey = pk(verifierKey) in
+    {8}in(public_channel, (context: CertificateRequestContext,context_sig: Signature));
+    {9}let verified_context: CertificateRequestContext = verifyContextSig(context,context_sig,verifierPubKey) in
+    {10}if (verified_context = context) then
+    {11}event AttesterUsesContext(context);
+    {12}let context_hash: bitstring = hashContext(context) in
+    {13}let tee_quote: TEEQuote = generateTEEQuote(context_hash,ifa) in
+    {14}let ihb: IHB = calculateIHB(bf,ifa) in
+    {15}event AttesterInitiatesRenewal(bf,ifa,rf,context);
+    {16}let evidence_payload: bitstring = (bf,rf,tee_quote,context,ihb) in
+    {17}let signature: Signature = sign(evidence_payload,rf) in
+    {18}out(public_channel, (evidence_payload,signature))
+) | (
+    {19}let expected_bf: BootFactor = bootFactor in
+    {20}let expected_ifa: InstanceFactor = instanceFactor in
+    {21}let expected_rf: RenewalFactor = renewalFactor in
+    {22}let verifierPrivKey: PrivateKey = verifierKey in
+    {23}new context_1: CertificateRequestContext;
+    {24}event VerifierGeneratesContext(context_1);
+    {25}let context_sig_1: Signature = signContext(context_1,verifierPrivKey) in
+    {26}out(public_channel, (context_1,context_sig_1));
+    {27}in(public_channel, (evidence_payload_1: bitstring,sig: Signature));
+    {28}let (rec_bf: BootFactor,rec_rf: RenewalFactor,rec_quote: TEEQuote,rec_context: CertificateRequestContext,rec_ihb: IHB) = evidence_payload_1 in
+    {29}let verified_payload: bitstring = verify(evidence_payload_1,sig,expected_rf) in
+    {30}if (verified_payload = evidence_payload_1) then
+    {31}if (rec_rf = expected_rf) then
+    {32}event ValidRFVerified(rec_rf);
+    {33}if (rec_context = context_1) then
+    {34}let expected_context_hash: bitstring = hashContext(context_1) in
+    {35}let verified_context_hash: bitstring = verifyTEEQuote(rec_quote,expected_ifa) in
+    {36}if (verified_context_hash = expected_context_hash) then
+    {37}event FreshMeasurementsVerified(expected_ifa);
+    {38}let expected_ihb: IHB = calculateIHB(expected_bf,expected_ifa) in
+    {39}if (rec_ihb = expected_ihb) then
+    {40}event VerifierAcceptsRenewal(expected_bf,expected_ifa,expected_rf,context_1)
+)
+
+--  Process 1 (that is, process 0, with let moved downwards):
+{1}new instanceFactor: InstanceFactor;
+{2}new renewalFactor: RenewalFactor;
+{3}new verifierKey: PrivateKey;
+(
+    {8}in(public_channel, (context: CertificateRequestContext,context_sig: Signature));
+    {7}let verifierPubKey: PublicKey = pk(verifierKey) in
+    {9}let verified_context: CertificateRequestContext = verifyContextSig(context,context_sig,verifierPubKey) in
+    {10}if (verified_context = context) then
+    {11}event AttesterUsesContext(context);
+    {6}let rf: RenewalFactor = renewalFactor in
+    {5}let ifa: InstanceFactor = instanceFactor in
+    {4}let bf: BootFactor = bootFactor in
+    {15}event AttesterInitiatesRenewal(bf,ifa,rf,context);
+    {14}let ihb: IHB = calculateIHB(bf,ifa) in
+    {12}let context_hash: bitstring = hashContext(context) in
+    {13}let tee_quote: TEEQuote = generateTEEQuote(context_hash,ifa) in
+    {16}let evidence_payload: bitstring = (bf,rf,tee_quote,context,ihb) in
+    {17}let signature: Signature = sign(evidence_payload,rf) in
+    {18}out(public_channel, (evidence_payload,signature))
+) | (
+    {23}new context_1: CertificateRequestContext;
+    {24}event VerifierGeneratesContext(context_1);
+    {22}let verifierPrivKey: PrivateKey = verifierKey in
+    {25}let context_sig_1: Signature = signContext(context_1,verifierPrivKey) in
+    {26}out(public_channel, (context_1,context_sig_1));
+    {27}in(public_channel, (evidence_payload_1: bitstring,sig: Signature));
+    {28}let (rec_bf: BootFactor,rec_rf: RenewalFactor,rec_quote: TEEQuote,rec_context: CertificateRequestContext,rec_ihb: IHB) = evidence_payload_1 in
+    {21}let expected_rf: RenewalFactor = renewalFactor in
+    {29}let verified_payload: bitstring = verify(evidence_payload_1,sig,expected_rf) in
+    {30}if (verified_payload = evidence_payload_1) then
+    {31}if (rec_rf = expected_rf) then
+    {32}event ValidRFVerified(rec_rf);
+    {33}if (rec_context = context_1) then
+    {20}let expected_ifa: InstanceFactor = instanceFactor in
+    {35}let verified_context_hash: bitstring = verifyTEEQuote(rec_quote,expected_ifa) in
+    {34}let expected_context_hash: bitstring = hashContext(context_1) in
+    {36}if (verified_context_hash = expected_context_hash) then
+    {37}event FreshMeasurementsVerified(expected_ifa);
+    {19}let expected_bf: BootFactor = bootFactor in
+    {38}let expected_ihb: IHB = calculateIHB(expected_bf,expected_ifa) in
+    {39}if (rec_ihb = expected_ihb) then
+    {40}event VerifierAcceptsRenewal(expected_bf,expected_ifa,expected_rf,context_1)
+)
+
+-- Query inj-event(VerifierAcceptsRenewal(bf_1,ifa_1,rf_1,ctx)) ==> inj-event(AttesterInitiatesRenewal(bf_1,ifa_1,rf_1,ctx)) in process 1.
+Translating the process into Horn clauses...
+Completing...
+Starting query inj-event(VerifierAcceptsRenewal(bf_1,ifa_1,rf_1,ctx)) ==> inj-event(AttesterInitiatesRenewal(bf_1,ifa_1,rf_1,ctx))
+goal reachable: attacker(rec_bf_1) && b-inj-event(AttesterInitiatesRenewal(bootFactor[],instanceFactor[],renewalFactor[],context_1[]),@occ15_1) -> inj-event(VerifierAcceptsRenewal(bootFactor[],instanceFactor[],renewalFactor[],context_1[]),@occ40_1)
+The 1st hypothesis occurs before the conclusion.
+The 2nd hypothesis occurs strictly before the conclusion.
+Abbreviations:
+@occ40_1 = @occ40[sig = sign((rec_bf_1,renewalFactor[],generateTEEQuote(hashContext(context_1[]),instanceFactor[]),context_1[],calculateIHB(bootFactor[],instanceFactor[])),renewalFactor[]),evidence_payload_1 = (rec_bf_1,renewalFactor[],generateTEEQuote(hashContext(context_1[]),instanceFactor[]),context_1[],calculateIHB(bootFactor[],instanceFactor[]))]
+@occ15_1 = @occ15[context_sig = signContext(context_1[],verifierKey[]),context = context_1[]]
+RESULT inj-event(VerifierAcceptsRenewal(bf_1,ifa_1,rf_1,ctx)) ==> inj-event(AttesterInitiatesRenewal(bf_1,ifa_1,rf_1,ctx)) is true.
+-- Query event(AttesterUsesContext(ctx)) ==> event(VerifierGeneratesContext(ctx)) in process 1.
+Translating the process into Horn clauses...
+Completing...
+Starting query event(AttesterUsesContext(ctx)) ==> event(VerifierGeneratesContext(ctx))
+goal reachable: b-event(VerifierGeneratesContext(context_1[])) -> event(AttesterUsesContext(context_1[]))
+RESULT event(AttesterUsesContext(ctx)) ==> event(VerifierGeneratesContext(ctx)) is true.
+-- Query event(ValidRFVerified(rf_1)) ==> event(AttesterInitiatesRenewal(bf_1,ifa_1,rf_1,ctx)) in process 1.
+Translating the process into Horn clauses...
+Completing...
+Starting query event(ValidRFVerified(rf_1)) ==> event(AttesterInitiatesRenewal(bf_1,ifa_1,rf_1,ctx))
+goal reachable: b-event(AttesterInitiatesRenewal(bootFactor[],instanceFactor[],renewalFactor[],context_1[])) -> event(ValidRFVerified(renewalFactor[]))
+RESULT event(ValidRFVerified(rf_1)) ==> event(AttesterInitiatesRenewal(bf_1,ifa_1,rf_1,ctx)) is true.
+-- Query event(FreshMeasurementsVerified(ifa_1)) ==> event(AttesterUsesContext(ctx)) in process 1.
+Translating the process into Horn clauses...
+Completing...
+Starting query event(FreshMeasurementsVerified(ifa_1)) ==> event(AttesterUsesContext(ctx))
+goal reachable: b-event(AttesterUsesContext(context_1[])) -> event(FreshMeasurementsVerified(instanceFactor[]))
+RESULT event(FreshMeasurementsVerified(ifa_1)) ==> event(AttesterUsesContext(ctx)) is true.
+
+--------------------------------------------------------------
+Verification summary:
+
+Query inj-event(VerifierAcceptsRenewal(bf_1,ifa_1,rf_1,ctx)) ==> inj-event(AttesterInitiatesRenewal(bf_1,ifa_1,rf_1,ctx)) is true.
+
+Query event(AttesterUsesContext(ctx)) ==> event(VerifierGeneratesContext(ctx)) is true.
+
+Query event(ValidRFVerified(rf_1)) ==> event(AttesterInitiatesRenewal(bf_1,ifa_1,rf_1,ctx)) is true.
+
+Query event(FreshMeasurementsVerified(ifa_1)) ==> event(AttesterUsesContext(ctx)) is true.
+
+--------------------------------------------------------------
+
