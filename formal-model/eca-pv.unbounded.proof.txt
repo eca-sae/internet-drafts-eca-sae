@@ -24,129 +24,115 @@ Process 0 (that is, the initial process):
     {22}let idKey: IdentityKey = deriveIdKey(bf,vf,uuid) in
     {23}let pubKey: PublicKey = derivePubKey(idKey) in
     {24}event AttesterPresentsKey(pubKey);
-    {25}let jp_proof: JP_Proof = calculateJP(bf,vf) in
-    {26}let hmacKey: HmacKey = deriveHmacKey(bf,vf,uuid) in
-    {27}let bound_hash: BoundHash = calculateBoundHash(ihb,pubKey,nonce) in
-    {28}let pop_tag: PoPTag = computePoP(hmacKey,bound_hash) in
-    {29}let final_eat_payload: bitstring = (ihb,jp_proof,nonce,pubKey,pop_tag) in
-    {30}let final_signature: Signature = sign(final_eat_payload,idKey) in
-    {31}out(public_channel, (final_eat_payload,final_signature,pubKey))
+    {25}let binding_proof: BindingProof = computeBindingProof(bf,vf,ihb,pubKey,nonce) in
+    {26}let final_eat_payload: bitstring = (ihb,nonce,pubKey,binding_proof) in
+    {27}let final_signature: Signature = sign(final_eat_payload,idKey) in
+    {28}out(public_channel, (final_eat_payload,final_signature,pubKey))
 ) | (
-    {32}!
-    {33}new expected_ifa: InstanceFactor;
-    {34}new expected_uuid: UUID;
-    {35}let expected_bf: BootFactor = bootFactor in
-    {36}let expected_ifa_1: InstanceFactor = expected_ifa in
-    {37}let uuid_1: UUID = expected_uuid in
-    {38}let verifierIdKey: IdentityKey = well_known_verifierIdKey in
-    {39}in(public_channel, (phase1_payload_1: bitstring,phase1_mac_1: MAC));
-    {40}let (attester_enc_pk: EncPublicKey,received_ihb: IHB) = phase1_payload_1 in
-    {41}let expected_authKey: bitstring = deriveAuthKey(expected_bf,expected_ifa_1,uuid_1) in
-    {42}if verifyMAC(phase1_payload_1,phase1_mac_1,expected_authKey) then
-    {43}let expected_ihb: IHB = calculateIHB(expected_bf,expected_ifa_1) in
-    {44}if (received_ihb = expected_ihb) then
-    {45}let expected_encKey: EncPrivateKey = deriveEncKey(expected_bf,expected_ifa_1,uuid_1) in
-    {46}let expected_encPubKey: EncPublicKey = deriveEncPubKey(expected_encKey) in
-    {47}if (attester_enc_pk = expected_encPubKey) then
-    {48}new seed: VFSeed;
-    {49}let vf_1: ValidatorFactor = mkVF(seed,expected_ifa_1) in
-    {50}event VFReleased(vf_1);
-    {51}new nonce_1: Nonce;
-    {52}event VerifierGeneratesNonce(nonce_1);
-    {53}let plaintext_1: bitstring = (vf_1,nonce_1) in
-    {54}let ciphertext_1: bitstring = penc(plaintext_1,attester_enc_pk) in
-    {55}let verifier_signature: Signature = sign(ciphertext_1,verifierIdKey) in
-    {56}event VerifierAuthenticated(verifierIdKey);
-    {57}event VerifierKeyMatch(derivePubKey(verifierIdKey),verifierIdKey);
-    {58}out(public_channel, (ciphertext_1,verifier_signature));
-    {59}in(public_channel, (final_eat_payload_1: bitstring,final_signature_1: Signature,final_pubKey: PublicKey));
-    {60}let verified_final: bitstring = verify(final_eat_payload_1,final_signature_1,final_pubKey) in
-    {61}let (rec_ihb: IHB,rec_jp: JP_Proof,rec_nonce: Nonce,rec_pubKey: PublicKey,rec_pop: PoPTag) = verified_final in
-    {62}if (rec_nonce = nonce_1) then
-    {63}let expected_idKey: IdentityKey = deriveIdKey(expected_bf,vf_1,uuid_1) in
-    {64}let expected_pubKey: PublicKey = derivePubKey(expected_idKey) in
-    {65}if (final_pubKey = expected_pubKey) then
-    {66}event VerifierValidatesWithKey(final_pubKey);
-    {67}let expected_jp: JP_Proof = calculateJP(expected_bf,vf_1) in
-    {68}if (rec_jp = expected_jp) then
-    {69}let expected_hmac_key: HmacKey = deriveHmacKey(expected_bf,vf_1,uuid_1) in
-    {70}let expected_bound_hash: BoundHash = calculateBoundHash(rec_ihb,rec_pubKey,rec_nonce) in
-    {71}if verifyPoP(rec_pop,expected_hmac_key,expected_bound_hash) then
-    {72}event VerifierAccepts(expected_bf,expected_ifa_1,uuid_1)
+    {29}!
+    {30}new expected_ifa: InstanceFactor;
+    {31}new expected_uuid: UUID;
+    {32}let expected_bf: BootFactor = bootFactor in
+    {33}let expected_ifa_1: InstanceFactor = expected_ifa in
+    {34}let uuid_1: UUID = expected_uuid in
+    {35}let verifierIdKey: IdentityKey = well_known_verifierIdKey in
+    {36}in(public_channel, (phase1_payload_1: bitstring,phase1_mac_1: MAC));
+    {37}let (attester_enc_pk: EncPublicKey,received_ihb: IHB) = phase1_payload_1 in
+    {38}let expected_authKey: bitstring = deriveAuthKey(expected_bf,expected_ifa_1,uuid_1) in
+    {39}if verifyMAC(phase1_payload_1,phase1_mac_1,expected_authKey) then
+    {40}let expected_ihb: IHB = calculateIHB(expected_bf,expected_ifa_1) in
+    {41}if (received_ihb = expected_ihb) then
+    {42}let expected_encKey: EncPrivateKey = deriveEncKey(expected_bf,expected_ifa_1,uuid_1) in
+    {43}let expected_encPubKey: EncPublicKey = deriveEncPubKey(expected_encKey) in
+    {44}if (attester_enc_pk = expected_encPubKey) then
+    {45}new seed: VFSeed;
+    {46}let vf_1: ValidatorFactor = mkVF(seed,expected_ifa_1) in
+    {47}event VFReleased(vf_1);
+    {48}new nonce_1: Nonce;
+    {49}event VerifierGeneratesNonce(nonce_1);
+    {50}let plaintext_1: bitstring = (vf_1,nonce_1) in
+    {51}let ciphertext_1: bitstring = penc(plaintext_1,attester_enc_pk) in
+    {52}let verifier_signature: Signature = sign(ciphertext_1,verifierIdKey) in
+    {53}event VerifierAuthenticated(verifierIdKey);
+    {54}event VerifierKeyMatch(derivePubKey(verifierIdKey),verifierIdKey);
+    {55}out(public_channel, (ciphertext_1,verifier_signature));
+    {56}in(public_channel, (final_eat_payload_1: bitstring,final_signature_1: Signature,final_pubKey: PublicKey));
+    {57}let verified_final: bitstring = verify(final_eat_payload_1,final_signature_1,final_pubKey) in
+    {58}let (rec_ihb: IHB,rec_nonce: Nonce,rec_pubKey: PublicKey,rec_binding: BindingProof) = verified_final in
+    {59}if (rec_nonce = nonce_1) then
+    {60}let expected_idKey: IdentityKey = deriveIdKey(expected_bf,vf_1,uuid_1) in
+    {61}let expected_pubKey: PublicKey = derivePubKey(expected_idKey) in
+    {62}if (final_pubKey = expected_pubKey) then
+    {63}if verifyBindingProof(rec_binding,expected_bf,vf_1,rec_ihb,rec_pubKey,rec_nonce) then
+    {64}event VerifierValidatesBinding(expected_bf,vf_1,rec_ihb,rec_pubKey,rec_nonce);
+    {65}event VerifierAccepts(expected_bf,expected_ifa_1,uuid_1)
 ) | (
-    {73}new compromisedIF: InstanceFactor;
-    {74}out(public_channel, compromisedIF)
+    {66}new compromisedIF: InstanceFactor;
+    {67}out(public_channel, compromisedIF)
 ) | (
-    {75}!
-    {76}new honestIF: InstanceFactor;
-    {77}new testUuid: UUID;
+    {68}!
+    {69}new honestIF: InstanceFactor;
+    {70}new testUuid: UUID;
     (
-        {78}let bf_1: BootFactor = bootFactor in
-        {79}let ifa_1: InstanceFactor = honestIF in
-        {80}let uuid_2: UUID = testUuid in
-        {81}let authKey_1: bitstring = deriveAuthKey(bf_1,ifa_1,uuid_2) in
-        {82}let encKey_1: EncPrivateKey = deriveEncKey(bf_1,ifa_1,uuid_2) in
-        {83}let encPubKey_1: EncPublicKey = deriveEncPubKey(encKey_1) in
-        {84}let ihb_1: IHB = calculateIHB(bf_1,ifa_1) in
-        {85}event AttesterInitiates(bf_1,ifa_1,uuid_2);
-        {86}let phase1_payload_2: bitstring = (encPubKey_1,ihb_1) in
-        {87}let phase1_mac_2: MAC = computeMAC(phase1_payload_2,authKey_1) in
-        {88}out(public_channel, (phase1_payload_2,phase1_mac_2));
-        {89}in(public_channel, (ciphertext_2: bitstring,verifier_sig_1: Signature));
-        {90}let verified_ciphertext_1: bitstring = verify(ciphertext_2,verifier_sig_1,well_known_verifierPubKey) in
-        {91}event AttesterAuthenticatesVerifier(well_known_verifierPubKey);
-        {92}let plaintext_2: bitstring = pdec(verified_ciphertext_1,encKey_1) in
-        {93}let (vf_2: ValidatorFactor,nonce_2: Nonce) = plaintext_2 in
-        {94}event AttesterUsesNonce(nonce_2);
-        {95}let idKey_1: IdentityKey = deriveIdKey(bf_1,vf_2,uuid_2) in
-        {96}let pubKey_1: PublicKey = derivePubKey(idKey_1) in
-        {97}event AttesterPresentsKey(pubKey_1);
-        {98}let jp_proof_1: JP_Proof = calculateJP(bf_1,vf_2) in
-        {99}let hmacKey_1: HmacKey = deriveHmacKey(bf_1,vf_2,uuid_2) in
-        {100}let bound_hash_1: BoundHash = calculateBoundHash(ihb_1,pubKey_1,nonce_2) in
-        {101}let pop_tag_1: PoPTag = computePoP(hmacKey_1,bound_hash_1) in
-        {102}let final_eat_payload_2: bitstring = (ihb_1,jp_proof_1,nonce_2,pubKey_1,pop_tag_1) in
-        {103}let final_signature_2: Signature = sign(final_eat_payload_2,idKey_1) in
-        {104}out(public_channel, (final_eat_payload_2,final_signature_2,pubKey_1))
+        {71}let bf_1: BootFactor = bootFactor in
+        {72}let ifa_1: InstanceFactor = honestIF in
+        {73}let uuid_2: UUID = testUuid in
+        {74}let authKey_1: bitstring = deriveAuthKey(bf_1,ifa_1,uuid_2) in
+        {75}let encKey_1: EncPrivateKey = deriveEncKey(bf_1,ifa_1,uuid_2) in
+        {76}let encPubKey_1: EncPublicKey = deriveEncPubKey(encKey_1) in
+        {77}let ihb_1: IHB = calculateIHB(bf_1,ifa_1) in
+        {78}event AttesterInitiates(bf_1,ifa_1,uuid_2);
+        {79}let phase1_payload_2: bitstring = (encPubKey_1,ihb_1) in
+        {80}let phase1_mac_2: MAC = computeMAC(phase1_payload_2,authKey_1) in
+        {81}out(public_channel, (phase1_payload_2,phase1_mac_2));
+        {82}in(public_channel, (ciphertext_2: bitstring,verifier_sig_1: Signature));
+        {83}let verified_ciphertext_1: bitstring = verify(ciphertext_2,verifier_sig_1,well_known_verifierPubKey) in
+        {84}event AttesterAuthenticatesVerifier(well_known_verifierPubKey);
+        {85}let plaintext_2: bitstring = pdec(verified_ciphertext_1,encKey_1) in
+        {86}let (vf_2: ValidatorFactor,nonce_2: Nonce) = plaintext_2 in
+        {87}event AttesterUsesNonce(nonce_2);
+        {88}let idKey_1: IdentityKey = deriveIdKey(bf_1,vf_2,uuid_2) in
+        {89}let pubKey_1: PublicKey = derivePubKey(idKey_1) in
+        {90}event AttesterPresentsKey(pubKey_1);
+        {91}let binding_proof_1: BindingProof = computeBindingProof(bf_1,vf_2,ihb_1,pubKey_1,nonce_2) in
+        {92}let final_eat_payload_2: bitstring = (ihb_1,nonce_2,pubKey_1,binding_proof_1) in
+        {93}let final_signature_2: Signature = sign(final_eat_payload_2,idKey_1) in
+        {94}out(public_channel, (final_eat_payload_2,final_signature_2,pubKey_1))
     ) | (
-        {105}let expected_bf_1: BootFactor = bootFactor in
-        {106}let expected_ifa_2: InstanceFactor = honestIF in
-        {107}let uuid_3: UUID = testUuid in
-        {108}let verifierIdKey_1: IdentityKey = well_known_verifierIdKey in
-        {109}in(public_channel, (phase1_payload_3: bitstring,phase1_mac_3: MAC));
-        {110}let (attester_enc_pk_1: EncPublicKey,received_ihb_1: IHB) = phase1_payload_3 in
-        {111}let expected_authKey_1: bitstring = deriveAuthKey(expected_bf_1,expected_ifa_2,uuid_3) in
-        {112}if verifyMAC(phase1_payload_3,phase1_mac_3,expected_authKey_1) then
-        {113}let expected_ihb_1: IHB = calculateIHB(expected_bf_1,expected_ifa_2) in
-        {114}if (received_ihb_1 = expected_ihb_1) then
-        {115}let expected_encKey_1: EncPrivateKey = deriveEncKey(expected_bf_1,expected_ifa_2,uuid_3) in
-        {116}let expected_encPubKey_1: EncPublicKey = deriveEncPubKey(expected_encKey_1) in
-        {117}if (attester_enc_pk_1 = expected_encPubKey_1) then
-        {118}new seed_1: VFSeed;
-        {119}let vf_3: ValidatorFactor = mkVF(seed_1,expected_ifa_2) in
-        {120}event VFReleased(vf_3);
-        {121}new nonce_3: Nonce;
-        {122}event VerifierGeneratesNonce(nonce_3);
-        {123}let plaintext_3: bitstring = (vf_3,nonce_3) in
-        {124}let ciphertext_3: bitstring = penc(plaintext_3,attester_enc_pk_1) in
-        {125}let verifier_signature_1: Signature = sign(ciphertext_3,verifierIdKey_1) in
-        {126}event VerifierAuthenticated(verifierIdKey_1);
-        {127}event VerifierKeyMatch(derivePubKey(verifierIdKey_1),verifierIdKey_1);
-        {128}out(public_channel, (ciphertext_3,verifier_signature_1));
-        {129}in(public_channel, (final_eat_payload_3: bitstring,final_signature_3: Signature,final_pubKey_1: PublicKey));
-        {130}let verified_final_1: bitstring = verify(final_eat_payload_3,final_signature_3,final_pubKey_1) in
-        {131}let (rec_ihb_1: IHB,rec_jp_1: JP_Proof,rec_nonce_1: Nonce,rec_pubKey_1: PublicKey,rec_pop_1: PoPTag) = verified_final_1 in
-        {132}if (rec_nonce_1 = nonce_3) then
-        {133}let expected_idKey_1: IdentityKey = deriveIdKey(expected_bf_1,vf_3,uuid_3) in
-        {134}let expected_pubKey_1: PublicKey = derivePubKey(expected_idKey_1) in
-        {135}if (final_pubKey_1 = expected_pubKey_1) then
-        {136}event VerifierValidatesWithKey(final_pubKey_1);
-        {137}let expected_jp_1: JP_Proof = calculateJP(expected_bf_1,vf_3) in
-        {138}if (rec_jp_1 = expected_jp_1) then
-        {139}let expected_hmac_key_1: HmacKey = deriveHmacKey(expected_bf_1,vf_3,uuid_3) in
-        {140}let expected_bound_hash_1: BoundHash = calculateBoundHash(rec_ihb_1,rec_pubKey_1,rec_nonce_1) in
-        {141}if verifyPoP(rec_pop_1,expected_hmac_key_1,expected_bound_hash_1) then
-        {142}event VerifierAccepts(expected_bf_1,expected_ifa_2,uuid_3)
+        {95}let expected_bf_1: BootFactor = bootFactor in
+        {96}let expected_ifa_2: InstanceFactor = honestIF in
+        {97}let uuid_3: UUID = testUuid in
+        {98}let verifierIdKey_1: IdentityKey = well_known_verifierIdKey in
+        {99}in(public_channel, (phase1_payload_3: bitstring,phase1_mac_3: MAC));
+        {100}let (attester_enc_pk_1: EncPublicKey,received_ihb_1: IHB) = phase1_payload_3 in
+        {101}let expected_authKey_1: bitstring = deriveAuthKey(expected_bf_1,expected_ifa_2,uuid_3) in
+        {102}if verifyMAC(phase1_payload_3,phase1_mac_3,expected_authKey_1) then
+        {103}let expected_ihb_1: IHB = calculateIHB(expected_bf_1,expected_ifa_2) in
+        {104}if (received_ihb_1 = expected_ihb_1) then
+        {105}let expected_encKey_1: EncPrivateKey = deriveEncKey(expected_bf_1,expected_ifa_2,uuid_3) in
+        {106}let expected_encPubKey_1: EncPublicKey = deriveEncPubKey(expected_encKey_1) in
+        {107}if (attester_enc_pk_1 = expected_encPubKey_1) then
+        {108}new seed_1: VFSeed;
+        {109}let vf_3: ValidatorFactor = mkVF(seed_1,expected_ifa_2) in
+        {110}event VFReleased(vf_3);
+        {111}new nonce_3: Nonce;
+        {112}event VerifierGeneratesNonce(nonce_3);
+        {113}let plaintext_3: bitstring = (vf_3,nonce_3) in
+        {114}let ciphertext_3: bitstring = penc(plaintext_3,attester_enc_pk_1) in
+        {115}let verifier_signature_1: Signature = sign(ciphertext_3,verifierIdKey_1) in
+        {116}event VerifierAuthenticated(verifierIdKey_1);
+        {117}event VerifierKeyMatch(derivePubKey(verifierIdKey_1),verifierIdKey_1);
+        {118}out(public_channel, (ciphertext_3,verifier_signature_1));
+        {119}in(public_channel, (final_eat_payload_3: bitstring,final_signature_3: Signature,final_pubKey_1: PublicKey));
+        {120}let verified_final_1: bitstring = verify(final_eat_payload_3,final_signature_3,final_pubKey_1) in
+        {121}let (rec_ihb_1: IHB,rec_nonce_1: Nonce,rec_pubKey_1: PublicKey,rec_binding_1: BindingProof) = verified_final_1 in
+        {122}if (rec_nonce_1 = nonce_3) then
+        {123}let expected_idKey_1: IdentityKey = deriveIdKey(expected_bf_1,vf_3,uuid_3) in
+        {124}let expected_pubKey_1: PublicKey = derivePubKey(expected_idKey_1) in
+        {125}if (final_pubKey_1 = expected_pubKey_1) then
+        {126}if verifyBindingProof(rec_binding_1,expected_bf_1,vf_3,rec_ihb_1,rec_pubKey_1,rec_nonce_1) then
+        {127}event VerifierValidatesBinding(expected_bf_1,vf_3,rec_ihb_1,rec_pubKey_1,rec_nonce_1);
+        {128}event VerifierAccepts(expected_bf_1,expected_ifa_2,uuid_3)
     )
 )
 
@@ -176,129 +162,115 @@ Process 0 (that is, the initial process):
     {22}let idKey: IdentityKey = deriveIdKey(bf,vf,uuid) in
     {23}let pubKey: PublicKey = derivePubKey(idKey) in
     {24}event AttesterPresentsKey(pubKey);
-    {27}let bound_hash: BoundHash = calculateBoundHash(ihb,pubKey,nonce) in
-    {26}let hmacKey: HmacKey = deriveHmacKey(bf,vf,uuid) in
-    {28}let pop_tag: PoPTag = computePoP(hmacKey,bound_hash) in
-    {25}let jp_proof: JP_Proof = calculateJP(bf,vf) in
-    {29}let final_eat_payload: bitstring = (ihb,jp_proof,nonce,pubKey,pop_tag) in
-    {30}let final_signature: Signature = sign(final_eat_payload,idKey) in
-    {31}out(public_channel, (final_eat_payload,final_signature,pubKey))
+    {25}let binding_proof: BindingProof = computeBindingProof(bf,vf,ihb,pubKey,nonce) in
+    {26}let final_eat_payload: bitstring = (ihb,nonce,pubKey,binding_proof) in
+    {27}let final_signature: Signature = sign(final_eat_payload,idKey) in
+    {28}out(public_channel, (final_eat_payload,final_signature,pubKey))
 ) | (
-    {32}!
-    {33}new expected_ifa: InstanceFactor;
-    {34}new expected_uuid: UUID;
-    {39}in(public_channel, (phase1_payload_1: bitstring,phase1_mac_1: MAC));
-    {40}let (attester_enc_pk: EncPublicKey,received_ihb: IHB) = phase1_payload_1 in
-    {37}let uuid_1: UUID = expected_uuid in
-    {36}let expected_ifa_1: InstanceFactor = expected_ifa in
-    {35}let expected_bf: BootFactor = bootFactor in
-    {41}let expected_authKey: bitstring = deriveAuthKey(expected_bf,expected_ifa_1,uuid_1) in
-    {42}if verifyMAC(phase1_payload_1,phase1_mac_1,expected_authKey) then
-    {43}let expected_ihb: IHB = calculateIHB(expected_bf,expected_ifa_1) in
-    {44}if (received_ihb = expected_ihb) then
-    {45}let expected_encKey: EncPrivateKey = deriveEncKey(expected_bf,expected_ifa_1,uuid_1) in
-    {46}let expected_encPubKey: EncPublicKey = deriveEncPubKey(expected_encKey) in
-    {47}if (attester_enc_pk = expected_encPubKey) then
-    {48}new seed: VFSeed;
-    {49}let vf_1: ValidatorFactor = mkVF(seed,expected_ifa_1) in
-    {50}event VFReleased(vf_1);
-    {51}new nonce_1: Nonce;
-    {52}event VerifierGeneratesNonce(nonce_1);
-    {38}let verifierIdKey: IdentityKey = well_known_verifierIdKey in
-    {56}event VerifierAuthenticated(verifierIdKey);
-    {57}event VerifierKeyMatch(derivePubKey(verifierIdKey),verifierIdKey);
-    {53}let plaintext_1: bitstring = (vf_1,nonce_1) in
-    {54}let ciphertext_1: bitstring = penc(plaintext_1,attester_enc_pk) in
-    {55}let verifier_signature: Signature = sign(ciphertext_1,verifierIdKey) in
-    {58}out(public_channel, (ciphertext_1,verifier_signature));
-    {59}in(public_channel, (final_eat_payload_1: bitstring,final_signature_1: Signature,final_pubKey: PublicKey));
-    {60}let verified_final: bitstring = verify(final_eat_payload_1,final_signature_1,final_pubKey) in
-    {61}let (rec_ihb: IHB,rec_jp: JP_Proof,rec_nonce: Nonce,rec_pubKey: PublicKey,rec_pop: PoPTag) = verified_final in
-    {62}if (rec_nonce = nonce_1) then
-    {63}let expected_idKey: IdentityKey = deriveIdKey(expected_bf,vf_1,uuid_1) in
-    {64}let expected_pubKey: PublicKey = derivePubKey(expected_idKey) in
-    {65}if (final_pubKey = expected_pubKey) then
-    {66}event VerifierValidatesWithKey(final_pubKey);
-    {67}let expected_jp: JP_Proof = calculateJP(expected_bf,vf_1) in
-    {68}if (rec_jp = expected_jp) then
-    {70}let expected_bound_hash: BoundHash = calculateBoundHash(rec_ihb,rec_pubKey,rec_nonce) in
-    {69}let expected_hmac_key: HmacKey = deriveHmacKey(expected_bf,vf_1,uuid_1) in
-    {71}if verifyPoP(rec_pop,expected_hmac_key,expected_bound_hash) then
-    {72}event VerifierAccepts(expected_bf,expected_ifa_1,uuid_1)
+    {29}!
+    {30}new expected_ifa: InstanceFactor;
+    {31}new expected_uuid: UUID;
+    {36}in(public_channel, (phase1_payload_1: bitstring,phase1_mac_1: MAC));
+    {37}let (attester_enc_pk: EncPublicKey,received_ihb: IHB) = phase1_payload_1 in
+    {34}let uuid_1: UUID = expected_uuid in
+    {33}let expected_ifa_1: InstanceFactor = expected_ifa in
+    {32}let expected_bf: BootFactor = bootFactor in
+    {38}let expected_authKey: bitstring = deriveAuthKey(expected_bf,expected_ifa_1,uuid_1) in
+    {39}if verifyMAC(phase1_payload_1,phase1_mac_1,expected_authKey) then
+    {40}let expected_ihb: IHB = calculateIHB(expected_bf,expected_ifa_1) in
+    {41}if (received_ihb = expected_ihb) then
+    {42}let expected_encKey: EncPrivateKey = deriveEncKey(expected_bf,expected_ifa_1,uuid_1) in
+    {43}let expected_encPubKey: EncPublicKey = deriveEncPubKey(expected_encKey) in
+    {44}if (attester_enc_pk = expected_encPubKey) then
+    {45}new seed: VFSeed;
+    {46}let vf_1: ValidatorFactor = mkVF(seed,expected_ifa_1) in
+    {47}event VFReleased(vf_1);
+    {48}new nonce_1: Nonce;
+    {49}event VerifierGeneratesNonce(nonce_1);
+    {35}let verifierIdKey: IdentityKey = well_known_verifierIdKey in
+    {53}event VerifierAuthenticated(verifierIdKey);
+    {54}event VerifierKeyMatch(derivePubKey(verifierIdKey),verifierIdKey);
+    {50}let plaintext_1: bitstring = (vf_1,nonce_1) in
+    {51}let ciphertext_1: bitstring = penc(plaintext_1,attester_enc_pk) in
+    {52}let verifier_signature: Signature = sign(ciphertext_1,verifierIdKey) in
+    {55}out(public_channel, (ciphertext_1,verifier_signature));
+    {56}in(public_channel, (final_eat_payload_1: bitstring,final_signature_1: Signature,final_pubKey: PublicKey));
+    {57}let verified_final: bitstring = verify(final_eat_payload_1,final_signature_1,final_pubKey) in
+    {58}let (rec_ihb: IHB,rec_nonce: Nonce,rec_pubKey: PublicKey,rec_binding: BindingProof) = verified_final in
+    {59}if (rec_nonce = nonce_1) then
+    {60}let expected_idKey: IdentityKey = deriveIdKey(expected_bf,vf_1,uuid_1) in
+    {61}let expected_pubKey: PublicKey = derivePubKey(expected_idKey) in
+    {62}if (final_pubKey = expected_pubKey) then
+    {63}if verifyBindingProof(rec_binding,expected_bf,vf_1,rec_ihb,rec_pubKey,rec_nonce) then
+    {64}event VerifierValidatesBinding(expected_bf,vf_1,rec_ihb,rec_pubKey,rec_nonce);
+    {65}event VerifierAccepts(expected_bf,expected_ifa_1,uuid_1)
 ) | (
-    {73}new compromisedIF: InstanceFactor;
-    {74}out(public_channel, compromisedIF)
+    {66}new compromisedIF: InstanceFactor;
+    {67}out(public_channel, compromisedIF)
 ) | (
-    {75}!
-    {76}new honestIF: InstanceFactor;
-    {77}new testUuid: UUID;
+    {68}!
+    {69}new honestIF: InstanceFactor;
+    {70}new testUuid: UUID;
     (
-        {80}let uuid_2: UUID = testUuid in
-        {79}let ifa_1: InstanceFactor = honestIF in
-        {78}let bf_1: BootFactor = bootFactor in
-        {85}event AttesterInitiates(bf_1,ifa_1,uuid_2);
-        {84}let ihb_1: IHB = calculateIHB(bf_1,ifa_1) in
-        {82}let encKey_1: EncPrivateKey = deriveEncKey(bf_1,ifa_1,uuid_2) in
-        {83}let encPubKey_1: EncPublicKey = deriveEncPubKey(encKey_1) in
-        {86}let phase1_payload_2: bitstring = (encPubKey_1,ihb_1) in
-        {81}let authKey_1: bitstring = deriveAuthKey(bf_1,ifa_1,uuid_2) in
-        {87}let phase1_mac_2: MAC = computeMAC(phase1_payload_2,authKey_1) in
-        {88}out(public_channel, (phase1_payload_2,phase1_mac_2));
-        {89}in(public_channel, (ciphertext_2: bitstring,verifier_sig_1: Signature));
-        {90}let verified_ciphertext_1: bitstring = verify(ciphertext_2,verifier_sig_1,well_known_verifierPubKey) in
-        {91}event AttesterAuthenticatesVerifier(well_known_verifierPubKey);
-        {92}let plaintext_2: bitstring = pdec(verified_ciphertext_1,encKey_1) in
-        {93}let (vf_2: ValidatorFactor,nonce_2: Nonce) = plaintext_2 in
-        {94}event AttesterUsesNonce(nonce_2);
-        {95}let idKey_1: IdentityKey = deriveIdKey(bf_1,vf_2,uuid_2) in
-        {96}let pubKey_1: PublicKey = derivePubKey(idKey_1) in
-        {97}event AttesterPresentsKey(pubKey_1);
-        {100}let bound_hash_1: BoundHash = calculateBoundHash(ihb_1,pubKey_1,nonce_2) in
-        {99}let hmacKey_1: HmacKey = deriveHmacKey(bf_1,vf_2,uuid_2) in
-        {101}let pop_tag_1: PoPTag = computePoP(hmacKey_1,bound_hash_1) in
-        {98}let jp_proof_1: JP_Proof = calculateJP(bf_1,vf_2) in
-        {102}let final_eat_payload_2: bitstring = (ihb_1,jp_proof_1,nonce_2,pubKey_1,pop_tag_1) in
-        {103}let final_signature_2: Signature = sign(final_eat_payload_2,idKey_1) in
-        {104}out(public_channel, (final_eat_payload_2,final_signature_2,pubKey_1))
+        {73}let uuid_2: UUID = testUuid in
+        {72}let ifa_1: InstanceFactor = honestIF in
+        {71}let bf_1: BootFactor = bootFactor in
+        {78}event AttesterInitiates(bf_1,ifa_1,uuid_2);
+        {77}let ihb_1: IHB = calculateIHB(bf_1,ifa_1) in
+        {75}let encKey_1: EncPrivateKey = deriveEncKey(bf_1,ifa_1,uuid_2) in
+        {76}let encPubKey_1: EncPublicKey = deriveEncPubKey(encKey_1) in
+        {79}let phase1_payload_2: bitstring = (encPubKey_1,ihb_1) in
+        {74}let authKey_1: bitstring = deriveAuthKey(bf_1,ifa_1,uuid_2) in
+        {80}let phase1_mac_2: MAC = computeMAC(phase1_payload_2,authKey_1) in
+        {81}out(public_channel, (phase1_payload_2,phase1_mac_2));
+        {82}in(public_channel, (ciphertext_2: bitstring,verifier_sig_1: Signature));
+        {83}let verified_ciphertext_1: bitstring = verify(ciphertext_2,verifier_sig_1,well_known_verifierPubKey) in
+        {84}event AttesterAuthenticatesVerifier(well_known_verifierPubKey);
+        {85}let plaintext_2: bitstring = pdec(verified_ciphertext_1,encKey_1) in
+        {86}let (vf_2: ValidatorFactor,nonce_2: Nonce) = plaintext_2 in
+        {87}event AttesterUsesNonce(nonce_2);
+        {88}let idKey_1: IdentityKey = deriveIdKey(bf_1,vf_2,uuid_2) in
+        {89}let pubKey_1: PublicKey = derivePubKey(idKey_1) in
+        {90}event AttesterPresentsKey(pubKey_1);
+        {91}let binding_proof_1: BindingProof = computeBindingProof(bf_1,vf_2,ihb_1,pubKey_1,nonce_2) in
+        {92}let final_eat_payload_2: bitstring = (ihb_1,nonce_2,pubKey_1,binding_proof_1) in
+        {93}let final_signature_2: Signature = sign(final_eat_payload_2,idKey_1) in
+        {94}out(public_channel, (final_eat_payload_2,final_signature_2,pubKey_1))
     ) | (
-        {109}in(public_channel, (phase1_payload_3: bitstring,phase1_mac_3: MAC));
-        {110}let (attester_enc_pk_1: EncPublicKey,received_ihb_1: IHB) = phase1_payload_3 in
-        {107}let uuid_3: UUID = testUuid in
-        {106}let expected_ifa_2: InstanceFactor = honestIF in
-        {105}let expected_bf_1: BootFactor = bootFactor in
-        {111}let expected_authKey_1: bitstring = deriveAuthKey(expected_bf_1,expected_ifa_2,uuid_3) in
-        {112}if verifyMAC(phase1_payload_3,phase1_mac_3,expected_authKey_1) then
-        {113}let expected_ihb_1: IHB = calculateIHB(expected_bf_1,expected_ifa_2) in
-        {114}if (received_ihb_1 = expected_ihb_1) then
-        {115}let expected_encKey_1: EncPrivateKey = deriveEncKey(expected_bf_1,expected_ifa_2,uuid_3) in
-        {116}let expected_encPubKey_1: EncPublicKey = deriveEncPubKey(expected_encKey_1) in
-        {117}if (attester_enc_pk_1 = expected_encPubKey_1) then
-        {118}new seed_1: VFSeed;
-        {119}let vf_3: ValidatorFactor = mkVF(seed_1,expected_ifa_2) in
-        {120}event VFReleased(vf_3);
-        {121}new nonce_3: Nonce;
-        {122}event VerifierGeneratesNonce(nonce_3);
-        {108}let verifierIdKey_1: IdentityKey = well_known_verifierIdKey in
-        {126}event VerifierAuthenticated(verifierIdKey_1);
-        {127}event VerifierKeyMatch(derivePubKey(verifierIdKey_1),verifierIdKey_1);
-        {123}let plaintext_3: bitstring = (vf_3,nonce_3) in
-        {124}let ciphertext_3: bitstring = penc(plaintext_3,attester_enc_pk_1) in
-        {125}let verifier_signature_1: Signature = sign(ciphertext_3,verifierIdKey_1) in
-        {128}out(public_channel, (ciphertext_3,verifier_signature_1));
-        {129}in(public_channel, (final_eat_payload_3: bitstring,final_signature_3: Signature,final_pubKey_1: PublicKey));
-        {130}let verified_final_1: bitstring = verify(final_eat_payload_3,final_signature_3,final_pubKey_1) in
-        {131}let (rec_ihb_1: IHB,rec_jp_1: JP_Proof,rec_nonce_1: Nonce,rec_pubKey_1: PublicKey,rec_pop_1: PoPTag) = verified_final_1 in
-        {132}if (rec_nonce_1 = nonce_3) then
-        {133}let expected_idKey_1: IdentityKey = deriveIdKey(expected_bf_1,vf_3,uuid_3) in
-        {134}let expected_pubKey_1: PublicKey = derivePubKey(expected_idKey_1) in
-        {135}if (final_pubKey_1 = expected_pubKey_1) then
-        {136}event VerifierValidatesWithKey(final_pubKey_1);
-        {137}let expected_jp_1: JP_Proof = calculateJP(expected_bf_1,vf_3) in
-        {138}if (rec_jp_1 = expected_jp_1) then
-        {140}let expected_bound_hash_1: BoundHash = calculateBoundHash(rec_ihb_1,rec_pubKey_1,rec_nonce_1) in
-        {139}let expected_hmac_key_1: HmacKey = deriveHmacKey(expected_bf_1,vf_3,uuid_3) in
-        {141}if verifyPoP(rec_pop_1,expected_hmac_key_1,expected_bound_hash_1) then
-        {142}event VerifierAccepts(expected_bf_1,expected_ifa_2,uuid_3)
+        {99}in(public_channel, (phase1_payload_3: bitstring,phase1_mac_3: MAC));
+        {100}let (attester_enc_pk_1: EncPublicKey,received_ihb_1: IHB) = phase1_payload_3 in
+        {97}let uuid_3: UUID = testUuid in
+        {96}let expected_ifa_2: InstanceFactor = honestIF in
+        {95}let expected_bf_1: BootFactor = bootFactor in
+        {101}let expected_authKey_1: bitstring = deriveAuthKey(expected_bf_1,expected_ifa_2,uuid_3) in
+        {102}if verifyMAC(phase1_payload_3,phase1_mac_3,expected_authKey_1) then
+        {103}let expected_ihb_1: IHB = calculateIHB(expected_bf_1,expected_ifa_2) in
+        {104}if (received_ihb_1 = expected_ihb_1) then
+        {105}let expected_encKey_1: EncPrivateKey = deriveEncKey(expected_bf_1,expected_ifa_2,uuid_3) in
+        {106}let expected_encPubKey_1: EncPublicKey = deriveEncPubKey(expected_encKey_1) in
+        {107}if (attester_enc_pk_1 = expected_encPubKey_1) then
+        {108}new seed_1: VFSeed;
+        {109}let vf_3: ValidatorFactor = mkVF(seed_1,expected_ifa_2) in
+        {110}event VFReleased(vf_3);
+        {111}new nonce_3: Nonce;
+        {112}event VerifierGeneratesNonce(nonce_3);
+        {98}let verifierIdKey_1: IdentityKey = well_known_verifierIdKey in
+        {116}event VerifierAuthenticated(verifierIdKey_1);
+        {117}event VerifierKeyMatch(derivePubKey(verifierIdKey_1),verifierIdKey_1);
+        {113}let plaintext_3: bitstring = (vf_3,nonce_3) in
+        {114}let ciphertext_3: bitstring = penc(plaintext_3,attester_enc_pk_1) in
+        {115}let verifier_signature_1: Signature = sign(ciphertext_3,verifierIdKey_1) in
+        {118}out(public_channel, (ciphertext_3,verifier_signature_1));
+        {119}in(public_channel, (final_eat_payload_3: bitstring,final_signature_3: Signature,final_pubKey_1: PublicKey));
+        {120}let verified_final_1: bitstring = verify(final_eat_payload_3,final_signature_3,final_pubKey_1) in
+        {121}let (rec_ihb_1: IHB,rec_nonce_1: Nonce,rec_pubKey_1: PublicKey,rec_binding_1: BindingProof) = verified_final_1 in
+        {122}if (rec_nonce_1 = nonce_3) then
+        {123}let expected_idKey_1: IdentityKey = deriveIdKey(expected_bf_1,vf_3,uuid_3) in
+        {124}let expected_pubKey_1: PublicKey = derivePubKey(expected_idKey_1) in
+        {125}if (final_pubKey_1 = expected_pubKey_1) then
+        {126}if verifyBindingProof(rec_binding_1,expected_bf_1,vf_3,rec_ihb_1,rec_pubKey_1,rec_nonce_1) then
+        {127}event VerifierValidatesBinding(expected_bf_1,vf_3,rec_ihb_1,rec_pubKey_1,rec_nonce_1);
+        {128}event VerifierAccepts(expected_bf_1,expected_ifa_2,uuid_3)
     )
 )
 
@@ -323,9 +295,9 @@ A more detailed output of the traces is available with
 
 new well_known_verifierIdKey: IdentityKey creating well_known_verifierIdKey_1 at {1}
 
-new compromisedIF: InstanceFactor creating compromisedIF_1 at {73}
+new compromisedIF: InstanceFactor creating compromisedIF_1 at {66}
 
-out(public_channel, ~M) with ~M = compromisedIF_1 at {74}
+out(public_channel, ~M) with ~M = compromisedIF_1 at {67}
 
 The attacker has the message bootFactor.
 A trace has been found.
@@ -363,9 +335,9 @@ A more detailed output of the traces is available with
 
 new well_known_verifierIdKey: IdentityKey creating well_known_verifierIdKey_1 at {1}
 
-new compromisedIF: InstanceFactor creating compromisedIF_1 at {73}
+new compromisedIF: InstanceFactor creating compromisedIF_1 at {66}
 
-out(public_channel, ~M) with ~M = compromisedIF_1 at {74}
+out(public_channel, ~M) with ~M = compromisedIF_1 at {67}
 
 The attacker has the message deriveIdKey(a,a_1,a_2).
 A trace has been found.
@@ -374,16 +346,16 @@ RESULT not attacker(deriveIdKey(bf_2,vf_4,uuid_4)) is false.
 Translating the process into Horn clauses...
 Completing...
 Starting query inj-event(VerifierAccepts(bf_2,ifa_2,uuid_4)) ==> inj-event(AttesterInitiates(bf_2,ifa_2,uuid_4))
-goal reachable: b-event(@p_act(@occ89_1,(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),sign(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),well_known_verifierIdKey[])))) && b-inj-event(AttesterInitiates(bootFactor[],honestIF_1,testUuid_1),@occ85_1) -> inj-event(VerifierAccepts(bootFactor[],honestIF_1,testUuid_1),@occ142_1)
+goal reachable: b-event(@p_act(@occ82_1,(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),sign(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),well_known_verifierIdKey[])))) && b-inj-event(AttesterInitiates(bootFactor[],honestIF_1,testUuid_1),@occ78_1) -> inj-event(VerifierAccepts(bootFactor[],honestIF_1,testUuid_1),@occ128_1)
 The 1st, 2nd hypotheses occur strictly before the conclusion.
 Abbreviations:
 honestIF_1 = honestIF[!1 = @sid]
 testUuid_1 = testUuid[!1 = @sid]
 seed_2 = seed_1[phase1_mac_3 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1)),phase1_payload_3 = (deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),!1 = @sid]
 nonce_4 = nonce_3[phase1_mac_3 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1)),phase1_payload_3 = (deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),!1 = @sid]
-@occ142_1 = @occ142[final_pubKey_1 = derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),final_signature_3 = sign((calculateIHB(bootFactor[],honestIF_1),calculateJP(bootFactor[],mkVF(seed_2,honestIF_1)),nonce_4,derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),computePoP(deriveHmacKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1),calculateBoundHash(calculateIHB(bootFactor[],honestIF_1),derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),nonce_4))),deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),final_eat_payload_3 = (calculateIHB(bootFactor[],honestIF_1),calculateJP(bootFactor[],mkVF(seed_2,honestIF_1)),nonce_4,derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),computePoP(deriveHmacKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1),calculateBoundHash(calculateIHB(bootFactor[],honestIF_1),derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),nonce_4))),phase1_mac_3 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1)),phase1_payload_3 = (deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),!1 = @sid]
-@occ89_1 = @occ89[!1 = @sid]
-@occ85_1 = @occ85[!1 = @sid]
+@occ128_1 = @occ128[final_pubKey_1 = derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),final_signature_3 = sign((calculateIHB(bootFactor[],honestIF_1),nonce_4,derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),computeBindingProof(bootFactor[],mkVF(seed_2,honestIF_1),calculateIHB(bootFactor[],honestIF_1),derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),nonce_4)),deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),final_eat_payload_3 = (calculateIHB(bootFactor[],honestIF_1),nonce_4,derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),computeBindingProof(bootFactor[],mkVF(seed_2,honestIF_1),calculateIHB(bootFactor[],honestIF_1),derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),nonce_4)),phase1_mac_3 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1)),phase1_payload_3 = (deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),!1 = @sid]
+@occ82_1 = @occ82[!1 = @sid]
+@occ78_1 = @occ78[!1 = @sid]
 RESULT inj-event(VerifierAccepts(bf_2,ifa_2,uuid_4)) ==> inj-event(AttesterInitiates(bf_2,ifa_2,uuid_4)) is true.
 -- Query event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)) in process 1.
 Translating the process into Horn clauses...
@@ -395,16 +367,17 @@ honestIF_1 = honestIF[!1 = @sid]
 testUuid_1 = testUuid[!1 = @sid]
 nonce_4 = nonce_3[phase1_mac_3 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1)),phase1_payload_3 = (deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),!1 = @sid]
 RESULT event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)) is true.
--- Query event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk)) in process 1.
+-- Query event(VerifierValidatesBinding(bf_2,vf_4,ihb_2,pk,n)) ==> event(AttesterPresentsKey(pk)) in process 1.
 Translating the process into Horn clauses...
 Completing...
-Starting query event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk))
-goal reachable: b-event(AttesterPresentsKey(derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)))) -> event(VerifierValidatesWithKey(derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1))))
+Starting query event(VerifierValidatesBinding(bf_2,vf_4,ihb_2,pk,n)) ==> event(AttesterPresentsKey(pk))
+goal reachable: b-event(AttesterPresentsKey(derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)))) -> event(VerifierValidatesBinding(bootFactor[],mkVF(seed_2,honestIF_1),calculateIHB(bootFactor[],honestIF_1),derivePubKey(deriveIdKey(bootFactor[],mkVF(seed_2,honestIF_1),testUuid_1)),nonce_4))
 Abbreviations:
 honestIF_1 = honestIF[!1 = @sid]
 testUuid_1 = testUuid[!1 = @sid]
 seed_2 = seed_1[phase1_mac_3 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1)),phase1_payload_3 = (deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),!1 = @sid]
-RESULT event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk)) is true.
+nonce_4 = nonce_3[phase1_mac_3 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1)),phase1_payload_3 = (deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),!1 = @sid]
+RESULT event(VerifierValidatesBinding(bf_2,vf_4,ihb_2,pk,n)) ==> event(AttesterPresentsKey(pk)) is true.
 -- Query not (event(VFReleased(vf_4)) && attacker(vf_4)) in process 1.
 Translating the process into Horn clauses...
 Completing...
@@ -425,7 +398,7 @@ nonce_4 = nonce_3[phase1_mac_3 = computeMAC((deriveEncPubKey(deriveEncKey(bootFa
 honestIF_2 = honestIF[!1 = @sid_1]
 testUuid_2 = testUuid[!1 = @sid_1]
 
-1. The message ((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),deriveAuthKey(bootFactor[],honestIF_2,testUuid_2))) may be sent to the attacker at output {88}.
+1. The message ((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),deriveAuthKey(bootFactor[],honestIF_2,testUuid_2))) may be sent to the attacker at output {81}.
 attacker(((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),deriveAuthKey(bootFactor[],honestIF_2,testUuid_2)))).
 
 2. By 1, the attacker may know ((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),deriveAuthKey(bootFactor[],honestIF_2,testUuid_2))).
@@ -454,11 +427,11 @@ By 2, the attacker may know computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[
 Using the function 2-tuple the attacker may obtain ((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),deriveAuthKey(bootFactor[],honestIF_2,testUuid_2))).
 attacker(((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),deriveAuthKey(bootFactor[],honestIF_2,testUuid_2)))).
 
-8. The message ((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),deriveAuthKey(bootFactor[],honestIF_2,testUuid_2))) that the attacker may have by 7 may be received at input {109}.
-So event VerifierKeyMatch(derivePubKey(well_known_verifierIdKey[]),well_known_verifierIdKey[]) may be executed at {127}.
+8. The message ((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_2,testUuid_2)),calculateIHB(bootFactor[],honestIF_2)),deriveAuthKey(bootFactor[],honestIF_2,testUuid_2))) that the attacker may have by 7 may be received at input {99}.
+So event VerifierKeyMatch(derivePubKey(well_known_verifierIdKey[]),well_known_verifierIdKey[]) may be executed at {117}.
 event(VerifierKeyMatch(derivePubKey(well_known_verifierIdKey[]),well_known_verifierIdKey[])).
 
-9. The message ((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1))) may be sent to the attacker at output {88}.
+9. The message ((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1))) may be sent to the attacker at output {81}.
 attacker(((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1)))).
 
 10. By 9, the attacker may know ((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1))).
@@ -487,8 +460,8 @@ By 10, the attacker may know computeMAC((deriveEncPubKey(deriveEncKey(bootFactor
 Using the function 2-tuple the attacker may obtain ((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1))).
 attacker(((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1)))).
 
-16. The message ((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1))) that the attacker may have by 15 may be received at input {109}.
-So the message (penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),sign(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),well_known_verifierIdKey[])) may be sent to the attacker at output {128}.
+16. The message ((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),computeMAC((deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1)),calculateIHB(bootFactor[],honestIF_1)),deriveAuthKey(bootFactor[],honestIF_1,testUuid_1))) that the attacker may have by 15 may be received at input {99}.
+So the message (penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),sign(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),well_known_verifierIdKey[])) may be sent to the attacker at output {118}.
 attacker((penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),sign(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),well_known_verifierIdKey[]))).
 
 17. By 16, the attacker may know (penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),sign(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),well_known_verifierIdKey[])).
@@ -504,8 +477,8 @@ By 17, the attacker may know sign(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveE
 Using the function 2-tuple the attacker may obtain (penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),sign(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),well_known_verifierIdKey[])).
 attacker((penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),sign(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),well_known_verifierIdKey[]))).
 
-20. The message (penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),sign(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),well_known_verifierIdKey[])) that the attacker may have by 19 may be received at input {89}.
-So event AttesterAuthenticatesVerifier(derivePubKey(well_known_verifierIdKey[])) may be executed at {91}.
+20. The message (penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),sign(penc((mkVF(seed_2,honestIF_1),nonce_4),deriveEncPubKey(deriveEncKey(bootFactor[],honestIF_1,testUuid_1))),well_known_verifierIdKey[])) that the attacker may have by 19 may be received at input {82}.
+So event AttesterAuthenticatesVerifier(derivePubKey(well_known_verifierIdKey[])) may be executed at {84}.
 event(AttesterAuthenticatesVerifier(derivePubKey(well_known_verifierIdKey[]))).
 
 21. By 20, event(AttesterAuthenticatesVerifier(derivePubKey(well_known_verifierIdKey[]))).
@@ -519,73 +492,74 @@ A more detailed output of the traces is available with
 
 new well_known_verifierIdKey: IdentityKey creating well_known_verifierIdKey_1 at {1}
 
-new honestIF: InstanceFactor creating honestIF_3 at {76} in copy a
+new honestIF: InstanceFactor creating honestIF_3 at {69} in copy a
 
-new testUuid: UUID creating testUuid_3 at {77} in copy a
+new testUuid: UUID creating testUuid_3 at {70} in copy a
 
-event AttesterInitiates(bootFactor,honestIF_3,testUuid_3) at {85} in copy a
+event AttesterInitiates(bootFactor,honestIF_3,testUuid_3) at {78} in copy a
 
-out(public_channel, ((~M,~M_1),~M_2)) with ~M = deriveEncPubKey(deriveEncKey(bootFactor,honestIF_3,testUuid_3)), ~M_1 = calculateIHB(bootFactor,honestIF_3), ~M_2 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor,honestIF_3,testUuid_3)),calculateIHB(bootFactor,honestIF_3)),deriveAuthKey(bootFactor,honestIF_3,testUuid_3)) at {88} in copy a
+out(public_channel, ((~M,~M_1),~M_2)) with ~M = deriveEncPubKey(deriveEncKey(bootFactor,honestIF_3,testUuid_3)), ~M_1 = calculateIHB(bootFactor,honestIF_3), ~M_2 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor,honestIF_3,testUuid_3)),calculateIHB(bootFactor,honestIF_3)),deriveAuthKey(bootFactor,honestIF_3,testUuid_3)) at {81} in copy a
 
-new honestIF: InstanceFactor creating honestIF_4 at {76} in copy a_1
+new honestIF: InstanceFactor creating honestIF_4 at {69} in copy a_1
 
-new testUuid: UUID creating testUuid_4 at {77} in copy a_1
+new testUuid: UUID creating testUuid_4 at {70} in copy a_1
 
-event AttesterInitiates(bootFactor,honestIF_4,testUuid_4) at {85} in copy a_1
+event AttesterInitiates(bootFactor,honestIF_4,testUuid_4) at {78} in copy a_1
 
-out(public_channel, ((~M_3,~M_4),~M_5)) with ~M_3 = deriveEncPubKey(deriveEncKey(bootFactor,honestIF_4,testUuid_4)), ~M_4 = calculateIHB(bootFactor,honestIF_4), ~M_5 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor,honestIF_4,testUuid_4)),calculateIHB(bootFactor,honestIF_4)),deriveAuthKey(bootFactor,honestIF_4,testUuid_4)) at {88} in copy a_1
+out(public_channel, ((~M_3,~M_4),~M_5)) with ~M_3 = deriveEncPubKey(deriveEncKey(bootFactor,honestIF_4,testUuid_4)), ~M_4 = calculateIHB(bootFactor,honestIF_4), ~M_5 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor,honestIF_4,testUuid_4)),calculateIHB(bootFactor,honestIF_4)),deriveAuthKey(bootFactor,honestIF_4,testUuid_4)) at {81} in copy a_1
 
-new honestIF: InstanceFactor creating honestIF_5 at {76} in copy a_2
+new honestIF: InstanceFactor creating honestIF_5 at {69} in copy a_2
 
-new testUuid: UUID creating testUuid_5 at {77} in copy a_2
+new testUuid: UUID creating testUuid_5 at {70} in copy a_2
 
-event AttesterInitiates(bootFactor,honestIF_5,testUuid_5) at {85} in copy a_2
+event AttesterInitiates(bootFactor,honestIF_5,testUuid_5) at {78} in copy a_2
 
-out(public_channel, ((~M_6,~M_7),~M_8)) with ~M_6 = deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5)), ~M_7 = calculateIHB(bootFactor,honestIF_5), ~M_8 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5)),calculateIHB(bootFactor,honestIF_5)),deriveAuthKey(bootFactor,honestIF_5,testUuid_5)) at {88} in copy a_2
+out(public_channel, ((~M_6,~M_7),~M_8)) with ~M_6 = deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5)), ~M_7 = calculateIHB(bootFactor,honestIF_5), ~M_8 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5)),calculateIHB(bootFactor,honestIF_5)),deriveAuthKey(bootFactor,honestIF_5,testUuid_5)) at {81} in copy a_2
 
-new compromisedIF: InstanceFactor creating compromisedIF_1 at {73}
+new compromisedIF: InstanceFactor creating compromisedIF_1 at {66}
 
-out(public_channel, ~M_9) with ~M_9 = compromisedIF_1 at {74}
+out(public_channel, ~M_9) with ~M_9 = compromisedIF_1 at {67}
 
-in(public_channel, ((~M_6,~M_7),~M_8)) with ~M_6 = deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5)), ~M_7 = calculateIHB(bootFactor,honestIF_5), ~M_8 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5)),calculateIHB(bootFactor,honestIF_5)),deriveAuthKey(bootFactor,honestIF_5,testUuid_5)) at {109} in copy a_2
+in(public_channel, ((~M_6,~M_7),~M_8)) with ~M_6 = deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5)), ~M_7 = calculateIHB(bootFactor,honestIF_5), ~M_8 = computeMAC((deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5)),calculateIHB(bootFactor,honestIF_5)),deriveAuthKey(bootFactor,honestIF_5,testUuid_5)) at {99} in copy a_2
 
-new seed_1: VFSeed creating seed_3 at {118} in copy a_2
+new seed_1: VFSeed creating seed_3 at {108} in copy a_2
 
-event VFReleased(mkVF(seed_3,honestIF_5)) at {120} in copy a_2
+event VFReleased(mkVF(seed_3,honestIF_5)) at {110} in copy a_2
 
-new nonce_3: Nonce creating nonce_5 at {121} in copy a_2
+new nonce_3: Nonce creating nonce_5 at {111} in copy a_2
 
-event VerifierGeneratesNonce(nonce_5) at {122} in copy a_2
+event VerifierGeneratesNonce(nonce_5) at {112} in copy a_2
 
-event VerifierAuthenticated(well_known_verifierIdKey_1) at {126} in copy a_2
+event VerifierAuthenticated(well_known_verifierIdKey_1) at {116} in copy a_2
 
-event VerifierKeyMatch(derivePubKey(well_known_verifierIdKey_1),well_known_verifierIdKey_1) at {127} in copy a_2 (goal)
+event VerifierKeyMatch(derivePubKey(well_known_verifierIdKey_1),well_known_verifierIdKey_1) at {117} in copy a_2 (goal)
 
-out(public_channel, (~M_10,~M_11)) with ~M_10 = penc((mkVF(seed_3,honestIF_5),nonce_5),deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5))), ~M_11 = sign(penc((mkVF(seed_3,honestIF_5),nonce_5),deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5))),well_known_verifierIdKey_1) at {128} in copy a_2
+out(public_channel, (~M_10,~M_11)) with ~M_10 = penc((mkVF(seed_3,honestIF_5),nonce_5),deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5))), ~M_11 = sign(penc((mkVF(seed_3,honestIF_5),nonce_5),deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5))),well_known_verifierIdKey_1) at {118} in copy a_2
 
-in(public_channel, (~M_10,~M_11)) with ~M_10 = penc((mkVF(seed_3,honestIF_5),nonce_5),deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5))), ~M_11 = sign(penc((mkVF(seed_3,honestIF_5),nonce_5),deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5))),well_known_verifierIdKey_1) at {89} in copy a_1
+in(public_channel, (~M_10,~M_11)) with ~M_10 = penc((mkVF(seed_3,honestIF_5),nonce_5),deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5))), ~M_11 = sign(penc((mkVF(seed_3,honestIF_5),nonce_5),deriveEncPubKey(deriveEncKey(bootFactor,honestIF_5,testUuid_5))),well_known_verifierIdKey_1) at {82} in copy a_1
 
-event AttesterAuthenticatesVerifier(derivePubKey(well_known_verifierIdKey_1)) at {91} in copy a_1 (goal)
+event AttesterAuthenticatesVerifier(derivePubKey(well_known_verifierIdKey_1)) at {84} in copy a_1 (goal)
 
-The event AttesterAuthenticatesVerifier(derivePubKey(well_known_verifierIdKey_1)) is executed at {91} in copy a_1.
-The event VerifierKeyMatch(derivePubKey(well_known_verifierIdKey_1),well_known_verifierIdKey_1) is executed at {127} in copy a_2.
+The event AttesterAuthenticatesVerifier(derivePubKey(well_known_verifierIdKey_1)) is executed at {84} in copy a_1.
+The event VerifierKeyMatch(derivePubKey(well_known_verifierIdKey_1),well_known_verifierIdKey_1) is executed at {117} in copy a_2.
 A trace has been found.
 RESULT not (event(AttesterAuthenticatesVerifier(pk)) && event(VerifierKeyMatch(pk,vk))) is false.
 
 --------------------------------------------------------------
 Verification summary:
 
-(* -- Sanity tests, checking assumptions -- *)
 Query not attacker(bootFactor[]) is false.
+
 Query not attacker(deriveIdKey(bf_2,vf_4,uuid_4)) is false.
 
-(* -- Core security questions (need to return true) -- *)
 Query inj-event(VerifierAccepts(bf_2,ifa_2,uuid_4)) ==> inj-event(AttesterInitiates(bf_2,ifa_2,uuid_4)) is true.
+
 Query event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)) is true.
-Query event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk)) is true.
+
+Query event(VerifierValidatesBinding(bf_2,vf_4,ihb_2,pk,n)) ==> event(AttesterPresentsKey(pk)) is true.
+
 Query not (event(VFReleased(vf_4)) && attacker(vf_4)) is true.
 
-(* -- This should return *not false* -- *)
 Query not (event(AttesterAuthenticatesVerifier(pk)) && event(VerifierKeyMatch(pk,vk))) is false.
 
 --------------------------------------------------------------

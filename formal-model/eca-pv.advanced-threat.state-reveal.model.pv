@@ -1,5 +1,5 @@
-(* ECA Protocol - ProVerif Model v3 - ADVANCED THREATS
-  State Reveal Test
+(* ECA Protocol - ProVerif Model v6 - ADVANCED THREATS
+  State Reveal Test with Consolidated Binding Proof
   
   See the BASELINE model for normative tests
 *)
@@ -14,13 +14,10 @@ type PublicKey.
 type EncPrivateKey.
 type EncPublicKey.
 type IHB.
-type JP_Proof.
 type Signature.
 type Nonce.
 type MAC.
-type BoundHash.
-type PoPTag.
-type HmacKey.
+type BindingProof.
 type UUID.
 
 (* --- Constants and Channels --- *)
@@ -34,7 +31,6 @@ fun deriveIdKey(BootFactor, ValidatorFactor, UUID): IdentityKey.
 fun derivePubKey(IdentityKey): PublicKey.
 fun deriveEncKey(BootFactor, InstanceFactor, UUID): EncPrivateKey [private].
 fun deriveEncPubKey(EncPrivateKey): EncPublicKey.
-fun deriveHmacKey(BootFactor, ValidatorFactor, UUID): HmacKey.
 
 (* MAC for initial proof *)
 fun deriveAuthKey(BootFactor, InstanceFactor, UUID): bitstring.
@@ -43,10 +39,11 @@ reduc forall m: bitstring, k: bitstring; verifyMAC(m, computeMAC(m, k), k) = tru
 
 (* Protocol-specific calculations *)
 fun calculateIHB(BootFactor, InstanceFactor): IHB.
-fun calculateJP(BootFactor, ValidatorFactor): JP_Proof.
-fun calculateBoundHash(IHB, PublicKey, Nonce): BoundHash.
-fun computePoP(HmacKey, BoundHash): PoPTag.
-reduc forall k: HmacKey, h: BoundHash; verifyPoP(computePoP(k, h), k, h) = true.
+
+(* CONSOLIDATED: Single binding proof replaces JP + PoP *)
+fun computeBindingProof(BootFactor, ValidatorFactor, IHB, PublicKey, Nonce): BindingProof.
+reduc forall bf: BootFactor, vf: ValidatorFactor, ihb: IHB, pk: PublicKey, n: Nonce;
+      verifyBindingProof(computeBindingProof(bf, vf, ihb, pk, n), bf, vf, ihb, pk, n) = true.
 
 (* Standard Signatures *)
 fun sign(bitstring, IdentityKey): Signature.
@@ -65,8 +62,7 @@ event VFReleased(ValidatorFactor).
 event VerifierGeneratesNonce(Nonce).
 event AttesterUsesNonce(Nonce).
 event AttesterPresentsKey(PublicKey).
-event VerifierValidatesWithKey(PublicKey).
-(* New events for tracking protocol completion *)
+event VerifierValidatesBinding(BootFactor, ValidatorFactor, IHB, PublicKey, Nonce).
 event ProtocolCompleted(UUID).
 event VerifierKeyCompromised(IdentityKey).
 event EphemeralKeyCompromised(EncPrivateKey, UUID).
@@ -83,8 +79,8 @@ query bf: BootFactor, ifa: InstanceFactor, uuid: UUID;
       inj-event(VerifierAccepts(bf, ifa, uuid)) ==> inj-event(AttesterInitiates(bf, ifa, uuid)).
 query n: Nonce;
       event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)).
-query pk: PublicKey;
-      event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk)).
+query pk: PublicKey, bf: BootFactor, vf: ValidatorFactor, ihb: IHB, n: Nonce;
+      event(VerifierValidatesBinding(bf, vf, ihb, pk, n)) ==> event(AttesterPresentsKey(pk)).
 query vf: ValidatorFactor;
       event(VFReleased(vf)) && attacker(vf).
 
@@ -108,19 +104,15 @@ let AttesterProcess(bf: BootFactor, ifa: InstanceFactor, uuid: UUID, verifierPub
     let (vf: ValidatorFactor, nonce: Nonce) = plaintext in
     event AttesterUsesNonce(nonce);
 
-    (* Phase 3: Final proof using BOTH bf and vf *)
+    (* Phase 3: Final proof using CONSOLIDATED binding *)
     let idKey = deriveIdKey(bf, vf, uuid) in
     let pubKey = derivePubKey(idKey) in
     event AttesterPresentsKey(pubKey);
-    let jp_proof = calculateJP(bf, vf) in
-    let hmacKey = deriveHmacKey(bf, vf, uuid) in
-    let bound_hash = calculateBoundHash(ihb, pubKey, nonce) in
-    let pop_tag = computePoP(hmacKey, bound_hash) in
-    let final_eat_payload = (ihb, jp_proof, nonce, pubKey, pop_tag) in
+    let binding_proof = computeBindingProof(bf, vf, ihb, pubKey, nonce) in
+    let final_eat_payload = (ihb, nonce, pubKey, binding_proof) in
     let final_signature = sign(final_eat_payload, idKey) in
     out(public_channel, (final_eat_payload, final_signature, pubKey));
     
-    (* Mark protocol as completed for this attester *)
     event ProtocolCompleted(uuid).
 
 let VerifierProcess(expected_bf: BootFactor, expected_ifa: InstanceFactor, 
@@ -147,23 +139,18 @@ let VerifierProcess(expected_bf: BootFactor, expected_ifa: InstanceFactor,
                 let verifier_signature = sign(ciphertext, verifierIdKey) in
                 out(public_channel, (ciphertext, verifier_signature));
 
-                (* Phase 3: Verify the final proof of joint possession *)
+                (* Phase 3: Verify CONSOLIDATED binding proof *)
                 in(public_channel, (final_eat_payload: bitstring, final_signature: Signature, final_pubKey: PublicKey));
                 let verified_final = verify(final_eat_payload, final_signature, final_pubKey) in
-                let (rec_ihb: IHB, rec_jp: JP_Proof, rec_nonce: Nonce, rec_pubKey: PublicKey, rec_pop: PoPTag) = verified_final in
+                let (rec_ihb: IHB, rec_nonce: Nonce, rec_pubKey: PublicKey, rec_binding: BindingProof) = verified_final in
                 if rec_nonce = nonce then
                     let expected_idKey = deriveIdKey(expected_bf, vf, uuid) in
                     let expected_pubKey = derivePubKey(expected_idKey) in
                     if final_pubKey = expected_pubKey then
-                        event VerifierValidatesWithKey(final_pubKey);
-                        let expected_jp = calculateJP(expected_bf, vf) in
-                        if rec_jp = expected_jp then
-                            let expected_hmac_key = deriveHmacKey(expected_bf, vf, uuid) in
-                            let expected_bound_hash = calculateBoundHash(rec_ihb, rec_pubKey, rec_nonce) in
-                            if verifyPoP(rec_pop, expected_hmac_key, expected_bound_hash) then
-                                event VerifierAccepts(expected_bf, expected_ifa, uuid);
-                                event ProtocolCompleted(uuid); 0
-                            else 0
+                        if verifyBindingProof(rec_binding, expected_bf, vf, rec_ihb, rec_pubKey, rec_nonce) then
+                            event VerifierValidatesBinding(expected_bf, vf, rec_ihb, rec_pubKey, rec_nonce);
+                            event VerifierAccepts(expected_bf, expected_ifa, uuid);
+                            event ProtocolCompleted(uuid); 0
                         else 0
                     else 0
                 else 0
@@ -230,16 +217,25 @@ Expected Results and How to Test:
 
 All Expected Results:
 
-Query not attacker(bootFactor[]) is false. 
+Query not attacker(bootFactor[]) is false.
 Query not attacker(deriveIdKey(bf_2,vf_2,uuid_3)) is false.
 
 Query inj-event(VerifierAccepts(bf_2,ifa_2,uuid_3)) ==> inj-event(AttesterInitiates(bf_2,ifa_2,uuid_3)) is true.
 Query event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)) is true.
-Query event(VerifierValidatesWithKey(pk)) ==> event(AttesterPresentsKey(pk)) is true.
+Query event(VerifierValidatesBinding(bf_2,vf_2,ihb_1,pk,n)) ==> event(AttesterPresentsKey(pk)) is true.
 
 Query not (event(VFReleased(vf_2)) && attacker(vf_2)) is false.
 
 ---
+
+Changes in v6
+- Tests unifying JP + PoP into single binding proof 
+
+Changes in v5
+- BASELINE test is now "unbounded" (see seperate model)
+
+Changes in v4
+- Version number skipped
 
 Changes in v3 - BASELINE:
 - Updated to include Key Compromise Impersonation (KCI) test
