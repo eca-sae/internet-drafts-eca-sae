@@ -2,7 +2,7 @@
 title = "Static Artifact Exchange (SAE) Protocol"
 abbrev = "SAE"
 category = "exp"
-docname = "draft-ritz-sae-01"
+docname = "draft-ritz-sae-02"
 date = "2025-09-30T00:00:00Z"
 ipr = "trust200902"
 area = "SEC"
@@ -17,7 +17,7 @@ organization = "Independent"
 
 [seriesInfo]
 name = "Internet-Draft"
-value = "draft-ritz-sae-01"
+value = "draft-ritz-sae-02"
 stream = "IETF"
 status = "experimental"
 %%%
@@ -28,11 +28,13 @@ This document specifies the Static Artifact Exchange (SAE) protocol, an asynchro
 
 {mainmatter}
 
-# Introduction {#sec-intro}
+# Problem Statement {#sec-intro}
 
-Many cryptographic protocols require a coordinated, multi-phase exchange of artifacts. Traditional request-response patterns often introduce security risks at the transport layer, including complex state management, parser vulnerabilities, and injection attacks.
+The primary motivation for SAE is to provide a practical workaround for secure, asynchronous communication in environments where traditional, direct connectivity is difficult or undesirable. Modern network architectures, characterized by zero-trust policies, ephemeral IP addresses, and deny-all ingress/egress rules, create a "maze of isolated networks" that breaks conventional request-response patterns. SAE solves this problem by inverting the communication model. It replaces direct, push-based communication with a stateless, pull-only pattern where peers interact through a simple, immutable repository. This design eliminates the need for listening endpoints, complex firewall configurations, or whitelisting of transient clients, enabling robust communication with a minimal attack surface.
 
-This document specifies the Static Artifact Exchange (SAE) protocol, an alternative model designed for security and simplicity. In SAE, parties do not communicate directly but interact asynchronously through a simple, stateless repository. One party publishes a set of immutable, pre-computed artifacts and then a status indicator to signal completion. The other party polls for this status indicator and, upon observing it, retrieves the artifacts.
+# Scope {#sec-scope}
+
+This document specifies the Static Artifact Exchange (SAE) protocol. In SAE, parties do not communicate directly but interact asynchronously through a simple, stateless repository. One party publishes a set of immutable, pre-computed artifacts and then a status indicator to signal completion. The other party polls for this status indicator and, upon observing it, retrieves the artifacts.
 
 This "publish-then-poll" pattern, governed by a strict set of invariants, reduces the need for active listeners or dynamic request processing, limiting common attack surfaces. The security of the higher-level protocol relies on the cryptographic validity of the artifacts themselves, while the SAE transport provides a hardened, minimal-surface communication channel.
 
