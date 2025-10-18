@@ -54,7 +54,7 @@ ECA has two distinct cryptographic attestation procedures to address each specif
 
 2. **Attestation Renewal procedure** - A lightweight, single round-trip attestation procedure for continuous verification of established identity and state, ideal for long-running workloads and TEEs. 
 
-## Architectural Boundary: Multi-Cloud and Heterogeneous Environments
+## Multi-Cloud and Heterogeneous Environments
 
 The limitations of bearer token bootstrapping are most evident in multi-cloud and bare-metal environments where provider-native identity mechanisms are unavailable. When workloads migrate between trust domains, operators often revert to provisioning static credentials, directly exposing the system to the scaling risks described previously.
 
@@ -79,7 +79,7 @@ ECA's identity bootstrap procedure derives a portable and verifiable identity th
     +-----------------------------+
 ~~~
 
-## Architectural Flaw: The Provisioning Race Condition
+## The Provisioning Race Condition
 
 In environments without a built-in identity provider, bootstrapping with a static secret creates a race condition: the first entity to present the secret is granted access. This model depends entirely on the operational security of the secret distribution path rather than on a verifiable property of the workload itself.
 
@@ -1136,6 +1136,7 @@ This revision represents a significant architectural evolution of the ECA protoc
 * Replaced "re-attestation" with "attestation renewals"
 * Updated the preliminary formal model analysis in the appendix to reflect the protocol's evolution and provide clearer interpretations of the security boundary tests.
 * Integrated normative profiles from `interop-profiles.md` as new appendices
+* Explicitly state that any ProVerif models and associated analysis are preliminary, work-in-progress efforts.
 
 * Restructured the document significantly to introduce the conceptual model and deployment patterns upfront.
 * The document flow has been improved by moving the "Non-Goals" section up to follow "Motivation and Use Cases".
