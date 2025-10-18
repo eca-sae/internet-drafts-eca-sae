@@ -219,13 +219,14 @@ Expected Results and How to Test:
 All Expected Results:
 
 Query not attacker(bootFactor[]) is false.
-Query not attacker(deriveIdKey(bf_2,vf_2,uuid_3)) is false.
+Query not attacker(deriveIdKey(bf_1,vf_2,uuid_2)) is false.
 
-Query inj-event(VerifierAccepts(bf_2,ifa_2,uuid_3)) ==> inj-event(AttesterInitiates(bf_2,ifa_2,uuid_3)) is true.
-Query event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)) is true.
-Query event(VerifierValidatesBinding(bf_2,vf_2,ihb_1,pk,n)) ==> event(AttesterPresentsKey(pk)) is true.
+Query inj-event(VerifierAccepts(bf_1,ifa_1,uuid_2)) ==> inj-event(AttesterInitiates(bf_1,ifa_1,uuid_2)) is true.
+Query event(VerifierValidatesBinding(bf_1,vf_2,ihb_1,pk,n)) ==> event(AttesterPresentsKey(pk)) is true.
+Query not (event(VFReleased(vf_2)) && attacker(vf_2)) is true.
 
-Query not (event(VFReleased(vf_2)) && attacker(vf_2)) is false.
+Query event(AttesterUsesNonce(n)) ==> event(VerifierGeneratesNonce(n)) is false.
+
 
 ---
 
