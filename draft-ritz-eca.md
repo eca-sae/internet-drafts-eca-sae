@@ -14,7 +14,7 @@ fullname = "Nathanael Ritz"
 organization = "Independent"
   [author.address]
   email = "nathanritz@gmail.com"
-  
+
 [[author]]
 fullname = "Muhammad Usama Sardar"
 organization = "TU Dresden"
@@ -32,9 +32,7 @@ status = "standard"
 
 When distributing complex workloads across diverse service providers, a platform-agnostic identity bound to verifiable proof enables operators to decouple access control from underlying infrastructure without compromising security postures. Likewise, it may be desirable to challenge any long-running workload to a dynamic health check in order to maintain assurances of its trustworthiness over time.
 
-This document specifies Entity and Compute Attestation (ECA), a formally modelled protocol that profiles RATS architecture to address both needs. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish an emergent and cryptographically verifiable identity without the use of shared secrets like bearer tokens. The protocol also defines a lightweight attestation renewal procedure that operates over single round-trip bound to (D)TLS sessions via TLS-EA, enabling operators to continually verify high-assurance workloads, such as those running inside Trusted Execution Environments (TEEs). 
-
-ECA is designed as a supporting component for frameworks like WIMSE and to enhance related projects such as SPIFFE/SPIRE. The security properties of both procedures have been formally analyzed (see Appendix A).
+This document specifies Entity and Compute Attestation (ECA), a protocol that profiles RATS architecture to address both challenges. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish an emergent and cryptographically verifiable identity for ephemeral workloads through proof of joint possession without the use of secrets like bearer tokens. The protocol utilizes attested TLS protocol [@?I-D.fossati-tls-exported-attestation] to define an attestation renewal procedure providing single round-trip verification bound to (D)TLS sessions via TLS Exported Authenticators that directly enables continuous attestation over time. ECA is designed as a supporting component for frameworks like WIMSE and to enhance related projects such as SPIFFE/SPIRE. The security properties of both procedures are being formally analyzed (see Appendix A).
 
 {mainmatter}
 
@@ -48,7 +46,7 @@ Entity and Compute Attestation (ECA) profiles the Remote Attestation Procedures 
 
 1. **Identity Bootstrap procedure** - For initial "cold start" establishment of verifiable identity in environments not yet provisioned. This profile is a concrete instantiations of the Challenge/Response model.
 
-2. **Attestation Renewal procedure** - A lightweight, single round-trip attestation procedure for continuous verification of established identity and state, ideal for long-running workloads and TEEs. 
+2. **Attestation Renewal procedure** - A lightweight, single round-trip attestation procedure for continuous verification of established identity and state, ideal for long-running workloads and TEEs.
 
 In the RATS model, the compute instance acts as an Attester, generating verifiable Evidence about its software and configuration. This Evidence is appraised by a Verifier, which produces a trusted Attestation Result (AR) for a Relying Party to consume, realizing the RATS Passport Model. This fundamentally shifts the trust model from "who has the secret" to "what can be proven." By specifying the precise cryptographic interactions, ECA provides the 'how' for the conveyance of Evidence and Attestation Results, complementing other RATS work that defines the 'what' of attestation payloads.
 
@@ -60,8 +58,8 @@ Attestation can enable portable identity that survives migration across trust do
 
 ~~~
 +--------------------------------------+
-|  Workloads Across Environments       | 
-| (AWS | Azure | Bare-Metal | Edge)    | 
+|  Workloads Across Environments       |
+| (AWS | Azure | Bare-Metal | Edge)    |
 +--------------------------------------+
                    |
                    v
@@ -85,8 +83,8 @@ Remote attestation can address this gap by enabling cryptographic proof of compu
 
 ~~~
 +--------------------------------------+
-|  Bare-Metal / Alt-Cloud Environments | 
-| (No provider-backed identity)        | 
+|  Bare-Metal / Alt-Cloud Environments |
+| (No provider-backed identity)        |
 +--------------------------------------+
                    |
                    v
@@ -112,17 +110,17 @@ Continuous attestation can maintain trust throughout long-lived sessions.
             Verifying Relying Party          Attester
              (Client Application)       (TEE-Based Server)
                      |                           |
-                     |<== Established Session ==>|  
+                     |<== Established Session ==>|
                      |                           |
-                     |--------- Health check --->| 
+                     |--------- Health check --->|
                      | (bound to session state)  |
-                     |                           |                
-                     |<--- Evidence -------------|                       
-                     |(HW RoT Quote/Measurements)| 
- Appraise vs. Policy |                           | 
+                     |                           |
+                     |<--- Evidence -------------|
+                     |(HW RoT Quote/Measurements)|
+ Appraise vs. Policy |                           |
      (e.g., CoRIM    |                           |
-     validation)     |------ Policy Decision --->|                             
-                     |(upkeep or destroy session)|                                                     
+     validation)     |------ Policy Decision --->|
+                     |(upkeep or destroy session)|
 ~~~
 
 # Non-Goals {#non-goals}
@@ -153,7 +151,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
      - **Endorsers** (e.g., hardware manufacturers) provide cryptographic identity
      - **Reference Value Providers** supply expected measurements for appraisal
      - **Identity Suppliers** establish the Attester's cryptographic identity
-     
+
 **Relying Party**: Consumes signed Attestation Results to make authorization decisions.
 
 **Verifying Relying Party (VRP):** An entity that fulfills the roles of both Verifier and Relying Party, particularly in attestation renewal procedures. The VRP directly appraises Evidence from an Attester to make an authorization decision without consulting an external Verifier.
@@ -213,7 +211,7 @@ Phase 3: Prove(BF + VF) → Derive final identity key
 Output: AR (becomes RF for future renewals)
 ```
 
-### Attestation Renewal Procedure  
+### Attestation Renewal Procedure
 For instances with established identity, this lightweight single-phase procedure enables continuous verification of identity and state, ideal for long-running workloads and confidential computing.
 
 ```
@@ -232,7 +230,7 @@ A successful identity bootstrap procedure produces an Attestation Result (AR) co
 |   Identity     |   |Prove(BF + IF + VF) |   |    Result (AR)      |
 |                |   |                    |   |                     |
 +----------------+   +--------------------+   +---------------------+
-                                                     | 
+                                                     |
                                                      | AR used as RF
                                      success         | for renewal
                                    +---->-----+      |
@@ -242,7 +240,7 @@ A successful identity bootstrap procedure produces an Attestation Result (AR) co
 | Identity   |<----| Dynamic challenge |<--| Renewal Procedure   |
 | Revoked    |     |                   |   | Prove(BF + RF + IF) |
 |            |     |                   |   |                     |
-+------------+     +-------------------+   +---------------------+      
++------------+     +-------------------+   +---------------------+
 ~~~
 
 1.  **Day 0: Bootstrap** - Instance performs full identity bootstrap, receiving initial signed AR
@@ -255,12 +253,12 @@ A successful identity bootstrap procedure produces an Attestation Result (AR) co
 
 ### Factor Independence
 - Compromising BF reveals nothing about `IF`/`VF`/`RF`
-- Compromising IF doesn't help forge `VF` or `RF` proofs  
+- Compromising IF doesn't help forge `VF` or `RF` proofs
 - Each factor maintains its security properties
 
 ### Progressive Trust
 - Phase 1: Trust from platform evidence (`IF`)
-- Phase 2: Trust from Verifier challenge (`VF`) 
+- Phase 2: Trust from Verifier challenge (`VF`)
 - Phase 3: Trust from combined proof (`BF`+`VF`)
 - Renewal: Trust from continuity (`RF`) + current state (`IF`)
 
@@ -287,7 +285,7 @@ This factor algebra enables **composable trust** across diverse services that ad
     |
     |---> [Workload in AWS] --(proves BF+IF)--> [Operator Policy]
     |
-    |---> [Workload in Azure] --(proves BF+IF)--> [Same Policy]  
+    |---> [Workload in Azure] --(proves BF+IF)--> [Same Policy]
     |
     |---> [VM on-prem] --(proves BF+IF)--> [Same Policy]
 ~~~
@@ -312,7 +310,7 @@ A single developer can use ECA to establish trust with ephemeral cloud instances
 
 **Scenario**: Developer needs secure access to temporary cloud VMs for testing.
 
-- **Binding Factor (BF):** SSH public key + high entropy token 
+- **Binding Factor (BF):** SSH public key + high entropy token
 - **Instance Factor (IF):** VM's assigned `vendor_uuid`
 - **Verifier Factor (VF):** Developer's own laptop
 
@@ -365,19 +363,9 @@ Organization maintaining consistent identity across AWS, Azure, and on-premises 
 
 # Integration with Existing Frameworks {#integration-with-existing-frameworks}
 
-## Relationship with other RATS initiatives
-
-ECA is designed to operate within the broader RATS ecosystem and complements other key specifications.
-
-* **RATS Interaction Models:** As stated previously, ECA's procedures are direct implementations of the **Challenge/Response model** described in [@?I-D.ietf-rats-reference-interaction-models]. It provides the normative cryptographic details and state machine for a secure, interactive attestation flow that can be used to realize patterns like the Passport Model.
-
-* **RATS Posture Assessment:** The ECA protocol provides a secure conveyance mechanism for the high-level EAT payloads defined in [@?I-D.ietf-rats-posture-assessment]. The posture assessment draft focuses on defining claims that summarize compliance (the 'what'). ECA's Identity Bootstrap and Attestation Renewal procedures offer a purpose-built, secure, and formally-verified protocol for conveying these posture claims (the 'how'). A successful ECA bootstrap can produce an Attestation Result that confirms an Attester's compliance with a specific `mps` claim.
-
-* **Evidence Abstraction and Flexibility:**  Concise Reference Integrity Manifests (CoRIM) [@?I-D.ietf-rats-corim] is designed to define the expected values for low-level hardware and software measurements. The ECA protocol is agnostic to the evidence payload and is equally capable of conveying a detailed TEE Quote intended for appraisal against a CoRIM manifest (as in **IFP Pattern A**) or a summarized `mps` claim (as in **IFP Pattern B**). This flexibility allows operators to use a single, consistent attestation protocol across different assurance requirements and levels of abstraction.
-
 ## Alignment with Proposed SEAT Working Group {#seal-working-group-alignment}
 
-This specification's **attestation renewal procedure** directly implements the SEAT WG charter requirements for attested (D)TLS:
+This specification's **attestation renewal procedure** directly implements the proposed SEAT WG charter requirements for attested (D)TLS:
 
 | SEAT Requirement | How ECA Satisfies |
 |------------------|-------------------|
@@ -401,9 +389,9 @@ In this integrated model, a successful ECA bootstrap would conclude with an Atte
 
 ~~~
 # Example of SPIRE registration entry using selectors from a native ECA attestor
-spire-server entry create -spiffeID "spiffe://example.org/my-service"  
-\-parentID "spiffe://example.org/spire/agent/eca/\<verifier\_id\>"  
-\-selector "eca:euid:a1b2c3d4..."  
+spire-server entry create -spiffeID "spiffe://example.org/my-service"
+\-parentID "spiffe://example.org/spire/agent/eca/\<verifier\_id\>"
+\-selector "eca:euid:a1b2c3d4..."
 \-selector "eca:ihb:e5f6g7h8..."
 ~~~
 
@@ -498,7 +486,7 @@ The Verifier enforces a sequence of fail-closed validation gates in a specific o
 ## Phase 2: Challenge and Validator Factor Release {#phase-2-challenge-and-validator-factor-release}
 
 - **Verifier** generates:
-  - A fresh `VF` (≥128 bits) 
+  - A fresh `VF` (≥128 bits)
   - A 16-byte nonce
   - A fresh ephemeral Ed25519 keypair for this specific bootstrap procedure
 - Encrypts `{VF, nonce}` using HPKE to the Attester's ephemeral public key
@@ -542,7 +530,7 @@ These states apply to the identity bootstrap procedure; see []{#attestation-rene
 
 This section specifies the attestation renewal procedures for instances that possess an existing credential (a Renewal Factor) from a prior attestation.
 
-A formal model for this procedure and its proved security properties are provided. See []{#core-security-properties-renewal-model}
+A preliminary formal model for this procedure and its security properties are provided. See []{#core-security-properties-renewal-model}
 
 ## Prerequisites {#attestation-renewal-prerequisites}
 
@@ -586,7 +574,7 @@ These gates align with the formal model's events (see []{#core-security-properti
 
 5.  **Timestamp Validation**: Confirms Evidence timestamp within acceptable window
     - Failure: `TIME_EXPIRED`
-    
+
 ### Transport-Specific Implementations {#attestation-renewal-transport-specific}
 
 #### Session-Bound (D)TLS Pattern
@@ -665,7 +653,7 @@ The formal security analysis presented in this document (see [](#app-formal-mode
 
 The Verifier's ability to appraise evidence is anchored in a trust model that relies on upstream supply chain roles. An Endorser (e.g., a hardware manufacturer) supplies endorsements for the hardware's authenticity, while a Reference Value Provider supplies the expected 'golden' measurements for the software stack. The Verifier is configured to trust these entities when making its appraisal decision.
 
-**Trust Boundaries:** Without hardware roots of trust, the security scope is limited to passive network observers rather than compromised infrastructure providers. Hardware-rooted Instance Factor Pattern A addresses this limitation. For detailed pattern specifications, see []{#instance-factor-patterns-ifp}. This hardware-based protection is critical for mitigating State Reveal attacks, as a formal analysis confirmed that a compromise of the Attester's software environment can expose ephemeral keys used in the attestation procedure (see [](#attester-state-reveal)).
+**Trust Boundaries:** Without hardware roots of trust, the security scope is limited to passive network observers rather than compromised infrastructure providers. Hardware-rooted Instance Factor Pattern A addresses this limitation. For detailed pattern specifications, see [](#instance-factor-patterns-ifp). This hardware-based protection is critical for mitigating State Reveal attacks, as a preliminary formal analysis confirmed that a compromise of the Attester's software environment can expose ephemeral keys used in the attestation procedure (see [](#attester-state-reveal)).
 
 **Secrets Handling:** Derived keys are sensitive cryptographic material. Implementations MUST handle them securely in memory (e.g., using locked memory pages) and explicitly zeroize them after use.
 
@@ -696,7 +684,7 @@ The choice of Instance Factor Pattern directly maps to the desired security goal
 
 ## Attester State Compromise {#attester-state-compromise}
 
-The formal model confirms that the protocol cannot maintain secrecy of the Validator Factor (VF) if the Attester's runtime state is compromised and its ephemeral decryption key is extracted. A formal "State Reveal" analysis was conducted where the Attester's ephemeral private key was deliberately leaked to an attacker (see [](#attester-state-reveal)). The model confirmed that this compromise allows a passive network attacker to intercept and decrypt the Phase 2 ciphertext from the Verifier, revealing the `VF`.
+The preliminary formal model confirms that the protocol cannot maintain secrecy of the Validator Factor (VF) if the Attester's runtime state is compromised and its ephemeral decryption key is extracted. A formal "State Reveal" analysis was conducted where the Attester's ephemeral private key was deliberately leaked to an attacker (see [](#attester-state-reveal)). The model confirmed that this compromise allows a passive network attacker to intercept and decrypt the Phase 2 ciphertext from the Verifier, revealing the `VF`.
 
 This result establishes the protocol's security boundary regarding the Attester's runtime state. The only viable mitigation for this threat is the use of IFP Pattern A (hardware-rooted), where the Instance Factor and all keys derived from it are protected by a hardware root of trust.
 
@@ -725,10 +713,10 @@ If an ephemeral procedure key is compromised during an active bootstrap procedur
 
 However, the protocol's cryptographic design ensures this only enables denial of service, not authentication bypass:
 - The resulting Evidence will contain wrong nonce (fails Gate 8)
-- Wrong `pop_tag` (fails Gate 9)  
+- Wrong `pop_tag` (fails Gate 9)
 - No legitimate Verifier should accept this Evidence
 
-### Long-term Identity Keys  
+### Long-term Identity Keys
 
 - MUST be protected as high-value assets
 - MUST be used only to sign final Attestation Results
@@ -761,11 +749,7 @@ An end-to-end implementation of the bootstrap profile is publicly available at [
 
 The design of this protocol was heavily influenced by the simplicity and security goals of the age file encryption tool. The protocol's core cryptographic mechanisms would not be as simple or robust without the prior work of the IETF community in standardizing modern primitives, particularly Hybrid Public Key Encryption (HPKE) in [@?RFC9180].
 
-The integration with Exported Authenticators draws from [@?I-D.fossati-tls-exported-attestation].
-
-The SEAT Working Group charter and Confidential Computing Consortium Attestation SIG provided the use case requirements that shaped the attestation renewal model.
-
-The authors wish to thank the contributors of these foundational standards for making this work possible.
+The integration with Exported Authenticators draws from [@?I-D.fossati-tls-exported-attestation]. The authors wish to thank the contributors of this foundational draft for making this work possible.
 
 # External Links {#ext-links}
 
@@ -779,9 +763,9 @@ The authors wish to thank the contributors of these foundational standards for m
 
 {backmatter}
 
-# Formal Modelling (Informative) {#app-formal-modelling-informative}
+# Preliminary Formal Modelling (Informative) {#app-formal-modelling-informative}
 
-This appendix presents formal security analyses of the ECA **identity bootstrap procedure** and the **attestation renewal procedure** using ProVerif [[ECA-FORMAL-MODELS](#ext-links)]. The analysis assumes a Dolev–Yao network attacker and verifies core security properties for each procedure.
+Note that the formal analysis is currently a work-in-progress. This appendix presents the ongoing formal security analyses of the ECA **identity bootstrap procedure** and the **attestation renewal procedure** using ProVerif [[ECA-FORMAL-MODELS](#ext-links)]. The analysis assumes a Dolev–Yao network attacker and verifies core security properties for each procedure.
 
 The protocol's bootstrap security properties were analyzed using an exploratory formal model in ProVerif. The model assumes a powerful Dolev-Yao network attacker who can intercept, modify, and inject messages. It also correctly models the Binding Factor (`BF`) as public knowledge from the start, as per the protocol's "exposure tolerance" principle ([](#core-design-principles)).
 
@@ -800,7 +784,7 @@ In the baseline model, all core security goals were successfully shown to hold a
 
 ## Core Security Properties (Attestation Renewal) {#core-security-properties-renewal-model}
 
-**Model summary.** The renewal model binds **BF+IF+RF** and uses the TLS `certificate_request_context` as the freshness nonce (`REPORTDATA = hash(context)`), matching the renewal spec and the (D)TLS EA example. 
+**Model summary.** The renewal model binds **BF+IF+RF** and uses the TLS `certificate_request_context` as the freshness nonce (`REPORTDATA = hash(context)`), matching the renewal spec and the (D)TLS EA example.
 
 | Property | ProVerif Query | Result | Interpretation |
 | :--- | :--- | :--- | :--- |
@@ -811,7 +795,7 @@ In the baseline model, all core security goals were successfully shown to hold a
 
 ## Boundary Analysis (Advanced Threat Models) {#boundary-analysis-advanced-threat-models}
 
-Additional tests were performed to formally define the protocol's security boundaries under specific compromise scenarios. 
+Additional tests were performed to formally define the protocol's security boundaries under specific compromise scenarios.
 
 ### Key Compromise Impersonation (KCI) {#key-compromise-impersonation-kci}
 
@@ -1114,7 +1098,7 @@ This revision represents a significant architectural evolution of the ECA protoc
     * **Reference Profile and Examples:** A concrete reference profile (`ECA-VM-BOOTSTRAP-V1`) and a detailed (D)TLS example have been included as appendices.
     * **Implementation Status:** The section detailing the prototype's status is now included.
 
-* **Removed SAE from RECOMMENDED or normative transport requirements. Formal modeling and validation demonstrates that SAE is not required to maintain the security properties inherent in the logic of the applied cryptography.
+* **Removed SAE from RECOMMENDED or normative transport requirements. Preliminary formal modeling and validation demonstrates that SAE is not required to maintain the security properties inherent in the logic of the applied cryptography.
 
 ### Scope and Terminology Refinements
 
@@ -1123,7 +1107,7 @@ This revision represents a significant architectural evolution of the ECA protoc
 
 ### Expanded Integration and Use Cases
 
-* **WIMSE and SEAT Alignment:** The document now explicitly maps ECA roles and concepts to the **WIMSE (Workload Identity in Multi-Cloud Secure Environments)** architecture and details its alignment with the proposed **SEAT (Secure Evidence and Attestation Transport)** working group's goals.
+* **WIMSE and SEAT Alignment:** The document now explicitly maps ECA roles and concepts to the **WIMSE (Workload Identity in Multi-Cloud Secure Environments)** architecture and details its alignment with the **SEAT (Secure Evidence and Attestation Transport)** working group's goals.
 * **Post-Attestation Patterns:** Added a new section that describes the credential lifecycle, stateful attestation renewal, and patterns for chaining attestations to build hierarchical trust.
 
 ### Editorial Changes
