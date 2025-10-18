@@ -1,6 +1,6 @@
-# ECA/SAE Internet-Drafts
+# ECA Internet-Draft
 
-This is the development repository for the IETF Internet-Drafts specifying the Ephemeral Compute Attestation (ECA) and Static Artifact Exchange (SAE) protocols.
+This is the development repository for the IETF Internet-Drafts specifying the Entity & Compute Attestation (ECA) protocol.
 
 IPR: trust200902
 No known IPR claims by the authors.
