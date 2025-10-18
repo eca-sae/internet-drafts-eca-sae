@@ -639,11 +639,7 @@ An end-to-end implementation of the bootstrap profile is publicly available at [
 
 The design of this protocol was heavily influenced by the simplicity and security goals of the age file encryption tool. The protocol's core cryptographic mechanisms would not be as simple or robust without the prior work of the IETF community in standardizing modern primitives, particularly Hybrid Public Key Encryption (HPKE) in [@?RFC9180].
 
-The integration with Exported Authenticators draws from [@?I-D.fossati-tls-exported-attestation].
-
-The SEAT Working Group charter and Confidential Computing Consortium Attestation SIG provided the use case requirements that shaped the attestation renewal model.
-
-The authors wish to thank the contributors of these foundational standards for making this work possible.
+The integration with Exported Authenticators draws from [@?I-D.fossati-tls-exported-attestation]. The authors wish to thank the contributors of this foundational draft for making this work possible.
 
 # External Links {#ext-links}
 
@@ -657,9 +653,9 @@ The authors wish to thank the contributors of these foundational standards for m
 
 {backmatter}
 
-# Formal Modelling (Informative) {#app-formal-modelling-informative}
+# Preliminary Formal Modelling (Informative) {#app-formal-modelling-informative}
 
-This appendix presents the ongoing formal security analyses of the ECA **identity bootstrap procedure** and the **attestation renewal procedure** using ProVerif [[ECA-FORMAL-MODELS](#ext-links)]. The analysis assumes a Dolev–Yao network attacker and verifies core security properties for each procedure.
+Note that the formal analysis is currently a work-in-progress. This appendix presents the ongoing formal security analyses of the ECA **identity bootstrap procedure** and the **attestation renewal procedure** using ProVerif [[ECA-FORMAL-MODELS](#ext-links)]. The analysis assumes a Dolev–Yao network attacker and verifies core security properties for each procedure.
 
 The protocol's bootstrap security properties were analyzed using an exploratory formal model in ProVerif. The model assumes a powerful Dolev-Yao network attacker who can intercept, modify, and inject messages. It also correctly models the Binding Factor (`BF`) as public knowledge from the start, as per the protocol's "exposure tolerance" principle ([](#core-design-principles)).
 
@@ -1103,7 +1099,7 @@ This revision represents a significant architectural evolution of the ECA protoc
 
 ### Expanded Integration and Use Cases
 
-* **WIMSE and SEAT Alignment:** The document now explicitly maps ECA roles and concepts to the **WIMSE (Workload Identity in Multi-Cloud Secure Environments)** architecture and details its alignment with the **SEAT (Secure Evidence and Attestation Layer)** working group's goals.
+* **WIMSE and SEAT Alignment:** The document now explicitly maps ECA roles and concepts to the **WIMSE (Workload Identity in Multi-Cloud Secure Environments)** architecture and details its alignment with the **SEAT (Secure Evidence and Attestation Transport)** working group's goals.
 * **Post-Attestation Patterns:** Added a new section that describes the credential lifecycle, stateful attestation renewal, and patterns for chaining attestations to build hierarchical trust.
 
 ### Editorial Changes
