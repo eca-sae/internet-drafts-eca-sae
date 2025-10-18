@@ -32,7 +32,7 @@ status = "experimental"
 
 When distributing complex workloads across diverse service providers, a platform-agnostic identity bound to verifiable proof enables operators to decouple access control from underlying infrastructure without compromising security postures at scale. Likewise, it may be desirable to challenge any long-running workload to a dynamic health check in order to maintain assurances of its trustworthiness over time.
 
-This document specifies Entity and Compute Attestation (ECA), a formally modelled protocol that profiles RATS architecture to address both needs. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish an emergent and cryptographically verifiable identity without the use of shared secrets like bearer tokens. The protocol also defines a lightweight attestation renewal procedure that operates over single round-trip bound to (D)TLS sessions via TLS-EA, enabling operators to continually verify high-assurance workloads, such as those running inside Trusted Execution Environments (TEEs). 
+This document specifies Entity and Compute Attestation (ECA), a protocol whose properties are being formally modelled that profiles RATS architecture to address both needs. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish an emergent and cryptographically verifiable identity without the use of shared secrets like bearer tokens. The protocol utilizes attested TLS protocol [@?I-D.fossati-tls-exported-attestation] to define an attestation renewal procedure providing single round-trip verification bound to (D)TLS sessions via TLS Exported Authenticators that directly enables continuous attestation over time.
 
 ECA is designed as a supporting component for frameworks like WIMSE and to enhance related projects such as SPIFFE/SPIRE. The security properties of both procedures are being formally analyzed (see Appendix A).
 
@@ -294,9 +294,9 @@ The Instance Factor (IF) can be sourced through three defined patterns, each add
 | **B: Orchestrator-Provisioned** | Trusted control plane | Network attackers, untrusted workload | Cloud-native, Kubernetes, managed services | Instance metadata token, Kubernetes secret, etc. An ideal format for such claims is the Measurement or Policy Set (mps) claim defined in [@?I-D.ietf-rats-posture-assessment] such as a CIS Benchmark. |
 | **C: Artifact-Based** | Artifact integrity | Mitigating Trust-on-first-use (TOFU) scenarios | Development, testing, constrained environments | File content hash, container filesystem measurement, authorized_keys |
 
-### Security Guarantees and Benefits by Pattern
+### Security Benefits by Pattern
 
-The ECA protocol is designed to provide strong security guarantees, including a formally verified *authentication* property to prevent impersonation and a *freshness* guarantee that prevents replay attacks. These guarantees are realized differently depending on the chosen Instance Factor Pattern (IFP), with each pattern mitigating specific threats based on its security foundation.
+The ECA protocol is designed to provide strong security guarantees, including an authentication property (which is undergoing preliminary formal analysis) to prevent impersonation as well as a check for *freshness* that prevents replay attacks.
 
 #### Pattern A: Hardware-Rooted
 
@@ -406,7 +406,7 @@ ECA is designed to operate within the broader RATS ecosystem and complements oth
 
 * **RATS Interaction Models:** As stated previously, ECA's procedures are direct implementations of the **Challenge/Response model** described in [@?I-D.ietf-rats-reference-interaction-models]. It provides the normative cryptographic details and state machine for a secure, interactive attestation flow that can be used to realize patterns like the Passport Model.
 
-* **RATS Posture Assessment:** The ECA protocol provides a secure conveyance mechanism for the high-level EAT payloads defined in [@?I-D.ietf-rats-posture-assessment]. The posture assessment draft focuses on defining claims that summarize compliance (the 'what'). ECA's Identity Bootstrap and Attestation Renewal procedures offer a purpose-built, secure, and formally-verified protocol for conveying these posture claims (the 'how'). A successful ECA bootstrap can produce an Attestation Result that confirms an Attester's compliance with a specific `mps` claim.
+* **RATS Posture Assessment:** The ECA protocol provides a secure conveyance mechanism for the high-level EAT payloads defined in [@?I-D.ietf-rats-posture-assessment]. The posture assessment draft focuses on defining claims that summarize compliance (the 'what'). ECA's Identity Bootstrap and Attestation Renewal procedures offer a purpose-built, secure protocol for conveying these posture claims (the 'how'), whose security properties are undergoing preliminary formal analysis. A successful ECA bootstrap can produce an Attestation Result that confirms an Attester's compliance with a specific `mps` claim.
 
 * **Evidence Abstraction and Flexibility:**  Concise Reference Integrity Manifests (CoRIM) [@?I-D.ietf-rats-corim] is designed to define the expected values for low-level hardware and software measurements. The ECA protocol is agnostic to the evidence payload and is equally capable of conveying a detailed TEE Quote intended for appraisal against a CoRIM manifest (as in **IFP Pattern A**) or a summarized `mps` claim (as in **IFP Pattern B**). This flexibility allows operators to use a single, consistent attestation protocol across different assurance requirements and levels of abstraction.
 
@@ -785,9 +785,9 @@ The integration with Exported Authenticators draws from [@?I-D.fossati-tls-expor
 
 # Preliminary Formal Modelling (Informative) {#app-formal-modelling-informative}
 
-Note that the formal analysis is currently a work-in-progress. This appendix presents formal security analyses of the ECA **identity bootstrap procedure** and the **attestation renewal procedure** using ProVerif (tracked at <https://github.com/eca-sae/internet-drafts-eca-sae/tree/pv.0.6.0/formal-model>. The analysis assumes a Dolev–Yao network attacker and verifies core security properties for each procedure. The model assumes a powerful Dolev-Yao network attacker who can intercept, modify, and inject messages. It also models the Binding Factor (`BF`) as public knowledge from the start, as per the protocol's "exposure tolerance" principle ([](#core-design-principles)).
+Note that the formal analysis is currently a work-in-progress. This appendix presents the preliminary and ongoing formal security analyses of the ECA **identity bootstrap procedure** and the **attestation renewal procedure** using ProVerif (tracked at <https://github.com/eca-sae/internet-drafts-eca-sae/tree/pv.0.6.0/formal-model>. The analysis assumes a Dolev–Yao network attacker and verifies core security properties for each procedure. The model assumes a powerful Dolev-Yao network attacker who can intercept, modify, and inject messages. It also models the Binding Factor (`BF`) as public knowledge from the start, as per the protocol's "exposure tolerance" principle ([](#core-design-principles)).
 
-The analysis was conducted in two parts: verification of the core security properties against a network attacker, and an analysis of the protocol's behavior under specific key compromise scenarios to define its security boundaries.
+The analysis was conducted in two parts: examination of the core security properties against a network attacker, and an analysis of the protocol's behavior under specific key compromise scenarios to define its security boundaries.
 
 ## Core Security Properties (Bootstrap) {#core-security-properties-bootstrap-model}
 
