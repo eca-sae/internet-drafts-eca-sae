@@ -606,7 +606,7 @@ The attestation renewal procedure is a single-phase exchange.
 
 ### Validation Gates {#attestation-renewal-validation-gates}
 
-These gates align with the formal model's events (see []{#core-security-properties-renewal-model}).
+These gates align with the preliminary formal model's events (see []{#core-security-properties-renewal-model}).
 
 1.  **RF Signature Verification**: Validates credential authenticity
     - Failure: `CREDENTIAL_INVALID`
@@ -1034,7 +1034,7 @@ Client                              Server (TEE)
 - Ensures Quote was generated specifically for this request
 - Prevents replay of old Quotes across sessions
 
-This concrete flow is the reference for the renewal ProVerif model (`REPORTDATA = SHA-256(certificate_request_context)`), see []{#core-security-properties-renewal-model}.
+This concrete flow is the reference for the work-in-progress ProVerif model for renewal (`REPORTDATA = SHA-256(certificate_request_context)`), see []{#core-security-properties-renewal-model}.
 
 # EAT profiles {#app-evidence-profiles}
 
