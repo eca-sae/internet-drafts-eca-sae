@@ -785,7 +785,7 @@ The integration with Exported Authenticators draws from [@?I-D.fossati-tls-expor
 
 # Preliminary Formal Modelling (Informative) {#app-formal-modelling-informative}
 
-Note that the formal analysis is currently a work-in-progress. This appendix presents formal security analyses of the ECA **identity bootstrap procedure** and the **attestation renewal procedure** using ProVerif (tracked at <https://github.com/eca-sae/internet-drafts-eca-sae/blob/pv0.6.0/formal-model/>. The analysis assumes a Dolev–Yao network attacker and verifies core security properties for each procedure. The model assumes a powerful Dolev-Yao network attacker who can intercept, modify, and inject messages. It also models the Binding Factor (`BF`) as public knowledge from the start, as per the protocol's "exposure tolerance" principle ([](#core-design-principles)).
+Note that the formal analysis is currently a work-in-progress. This appendix presents formal security analyses of the ECA **identity bootstrap procedure** and the **attestation renewal procedure** using ProVerif (tracked at <https://github.com/eca-sae/internet-drafts-eca-sae/tree/pv.0.6.0/formal-model>. The analysis assumes a Dolev–Yao network attacker and verifies core security properties for each procedure. The model assumes a powerful Dolev-Yao network attacker who can intercept, modify, and inject messages. It also models the Binding Factor (`BF`) as public knowledge from the start, as per the protocol's "exposure tolerance" principle ([](#core-design-principles)).
 
 The analysis was conducted in two parts: verification of the core security properties against a network attacker, and an analysis of the protocol's behavior under specific key compromise scenarios to define its security boundaries.
 
