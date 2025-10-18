@@ -1,4 +1,4 @@
-# ECA/SAE + ProVerif Model Flow Diagram
+# ECA/SAE + ProVerif Model Flow Diagram (BASED ON -00 DRAFTS)
 
 This is an extension of [Appendix A from the ECA I-D](https://www.ietf.org/archive/id/draft-ritz-eca-00.html#name-formal-modelling-informativ), providing deeper explanations, variable mappings, and diagrams. 
 
