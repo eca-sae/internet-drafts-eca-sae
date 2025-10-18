@@ -32,7 +32,7 @@ status = "experimental"
 
 Heterogenous workloads across multi-cloud, bare-metal, and edge environments often lack verifiable identities, relying instead on pre-shared secrets that enable impersonation if intercepted. Concurrently, Trusted Execution Environments (TEEs) and other high-assurance workloads are limited to single point-in-time attestation when they otherwise require continuous verification of platform trustworthiness throughout long-running sessions.
 
-This document specifies Entity and Compute Attestation (ECA), a protocol that profiles RATS architecture to address both challenges. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish an emergent and cryptographically verifiable identity for ephemeral workloads through proof of joint possession without the use of secrets like bearer tokens. The protocol also defines an attestation renewal procedure providing single round-trip verification bound to (D)TLS sessions via TLS Exported Authenticators that directly enables continuous attestation over time. ECA is designed as a supporting component for frameworks like WIMSE and to enhance related projects such as SPIFFE/SPIRE. The security properties of both procedures have been formally analyzed (see Appendix A). 
+This document specifies Entity and Compute Attestation (ECA), a protocol that profiles RATS architecture to address both challenges. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish an emergent and cryptographically verifiable identity for ephemeral workloads through proof of joint possession without the use of secrets like bearer tokens. The protocol also defines an attestation renewal procedure providing single round-trip verification bound to (D)TLS sessions via TLS Exported Authenticators that directly enables continuous attestation over time. ECA is designed as a supporting component for frameworks like WIMSE and to enhance related projects such as SPIFFE/SPIRE. The security properties of both procedures are being formally analyzed (see Appendix A). 
 
 {mainmatter}
 
@@ -237,11 +237,11 @@ A successful identity bootstrap procedure concludes with the issuance of an Atte
 
 # Integration with Existing Frameworks {#integration-with-existing-frameworks}
 
-## Alignment with Proposed SEAL Working Group {#seal-working-group-alignment}
+## Alignment with Proposed SEAT Working Group {#seal-working-group-alignment}
 
-This specification's **attestation renewal procedure** directly implements the proposed SEAL WG charter requirements for attested (D)TLS:
+This specification's **attestation renewal procedure** directly implements the proposed SEAT WG charter requirements for attested (D)TLS:
 
-| SEAL Requirement | How ECA Satisfies |
+| SEAT Requirement | How ECA Satisfies |
 |------------------|-------------------|
 | **Per-connection freshness** | `certificate_request_context` bound into TEE Quote |
 | **Leverage (D)TLS 1.3** | Via RFC 9261 Exported Authenticators |
@@ -403,7 +403,7 @@ These states apply to the identity bootstrap procedure; see []{#attestation-rene
 
 This section specifies the attestation renewal procedures for instances that possess an existing credential (a Renewal Factor) from a prior attestation.
 
-A formal model for this procedure and its proved security properties are provided. See []{#core-security-properties-renewal-model}
+A preliminary formal model for this procedure and its security properties are provided. See []{#core-security-properties-renewal-model}
 
 ## Prerequisites {#Attestation Renewal Procedures-prerequisites}
 
@@ -526,7 +526,7 @@ The formal security analysis presented in this document (see [](#app-formal-mode
 
 The Verifier's ability to appraise evidence is anchored in a trust model that relies on upstream supply chain roles. An Endorser (e.g., a hardware manufacturer) supplies endorsements for the hardware's authenticity, while a Reference Value Provider supplies the expected 'golden' measurements for the software stack. The Verifier is configured to trust these entities when making its appraisal decision.
 
-**Trust Boundaries:** Without hardware roots of trust, the security scope is limited to passive network observers rather than compromised infrastructure providers. Hardware-rooted Instance Factor Pattern A addresses this limitation. For detailed pattern specifications, see [](#instance-factor-patterns-ifp). This hardware-based protection is critical for mitigating State Reveal attacks, as a formal analysis confirmed that a compromise of the Attester's software environment can expose ephemeral keys used in the attestation procedure (see [](#attester-state-reveal)).
+**Trust Boundaries:** Without hardware roots of trust, the security scope is limited to passive network observers rather than compromised infrastructure providers. Hardware-rooted Instance Factor Pattern A addresses this limitation. For detailed pattern specifications, see [](#instance-factor-patterns-ifp). This hardware-based protection is critical for mitigating State Reveal attacks, as a preliminary formal analysis confirmed that a compromise of the Attester's software environment can expose ephemeral keys used in the attestation procedure (see [](#attester-state-reveal)).
 
 **Secrets Handling:** Derived keys are sensitive cryptographic material. Implementations MUST handle them securely in memory (e.g., using locked memory pages) and explicitly zeroize them after use.
 
@@ -557,7 +557,7 @@ The choice of Instance Factor Pattern directly maps to the desired security goal
 
 ## Attester State Compromise {#attester-state-compromise}
 
-The formal model confirms that the protocol cannot maintain secrecy of the Validator Factor (VF) if the Attester's runtime state is compromised and its ephemeral decryption key is extracted. A formal "State Reveal" analysis was conducted where the Attester's ephemeral private key was deliberately leaked to an attacker (see [](#attester-state-reveal)). The model confirmed that this compromise allows a passive network attacker to intercept and decrypt the Phase 2 ciphertext from the Verifier, revealing the `VF`.
+The preliminary formal model confirms that the protocol cannot maintain secrecy of the Validator Factor (VF) if the Attester's runtime state is compromised and its ephemeral decryption key is extracted. A formal "State Reveal" analysis was conducted where the Attester's ephemeral private key was deliberately leaked to an attacker (see [](#attester-state-reveal)). The model confirmed that this compromise allows a passive network attacker to intercept and decrypt the Phase 2 ciphertext from the Verifier, revealing the `VF`.
 
 This result establishes the protocol's security boundary regarding the Attester's runtime state. The only viable mitigation for this threat is the use of IFP Pattern A (hardware-rooted), where the Instance Factor and all keys derived from it are protected by a hardware root of trust.
 
@@ -641,7 +641,7 @@ The design of this protocol was heavily influenced by the simplicity and securit
 
 The integration with Exported Authenticators draws from [@?I-D.fossati-tls-exported-attestation].
 
-The SEAL Working Group charter and Confidential Computing Consortium Attestation SIG provided the use case requirements that shaped the attestation renewal model.
+The SEAT Working Group charter and Confidential Computing Consortium Attestation SIG provided the use case requirements that shaped the attestation renewal model.
 
 The authors wish to thank the contributors of these foundational standards for making this work possible.
 
@@ -659,7 +659,7 @@ The authors wish to thank the contributors of these foundational standards for m
 
 # Formal Modelling (Informative) {#app-formal-modelling-informative}
 
-This appendix presents formal security analyses of the ECA **identity bootstrap procedure** and the **attestation renewal procedure** using ProVerif [[ECA-FORMAL-MODELS](#ext-links)]. The analysis assumes a Dolev–Yao network attacker and verifies core security properties for each procedure.
+This appendix presents the ongoing formal security analyses of the ECA **identity bootstrap procedure** and the **attestation renewal procedure** using ProVerif [[ECA-FORMAL-MODELS](#ext-links)]. The analysis assumes a Dolev–Yao network attacker and verifies core security properties for each procedure.
 
 The protocol's bootstrap security properties were analyzed using an exploratory formal model in ProVerif. The model assumes a powerful Dolev-Yao network attacker who can intercept, modify, and inject messages. It also correctly models the Binding Factor (`BF`) as public knowledge from the start, as per the protocol's "exposure tolerance" principle ([](#core-design-principles)).
 
@@ -1085,7 +1085,7 @@ This revision represents a significant architectural evolution of the ECA protoc
     1.  **Identity Bootstrapping:** For initial "cold start" establishment of verifiable identity in environments not yet provisioned.
     2.  **Attestation Renewal:** A lightweight, single round-trip attestation procedure for continuous verification of an established identity, ideal for long-running workloads and TEEs.
 
-* **New Session-Bound Deployment Model:** A primary deployment model using **(D)TLS Exported Authenticators** has been introduced. This aligns the protocol with the **SEAL WG charter** and directly supports continuous attestation for Trusted Execution Environments (TEEs).
+* **New Session-Bound Deployment Model:** A primary deployment model using **(D)TLS Exported Authenticators** has been introduced. This aligns the protocol with the **SEAT WG charter** and directly supports continuous attestation for Trusted Execution Environments (TEEs).
 
 * **Formal Model of Attestation Renewal:** Exploratory formal modeling and analysis of the attestation renewal model has been completed.
 
@@ -1094,7 +1094,7 @@ This revision represents a significant architectural evolution of the ECA protoc
     * **Reference Profile and Examples:** A concrete reference profile (`ECA-VM-BOOTSTRAP-V1`) and a detailed (D)TLS example have been included as appendices.
     * **Implementation Status:** The section detailing the prototype's status is now included.
 
-* **Removed SAE from RECOMMENDED or normative transport requirements. Formal modeling and validation demonstrates that SAE is not required to maintain the security properties inherent in the logic of the applied cryptography.
+* **Removed SAE from RECOMMENDED or normative transport requirements. Preliminary formal modeling and validation demonstrates that SAE is not required to maintain the security properties inherent in the logic of the applied cryptography.
 
 ### Scope and Terminology Refinements
 
@@ -1103,7 +1103,7 @@ This revision represents a significant architectural evolution of the ECA protoc
 
 ### Expanded Integration and Use Cases
 
-* **WIMSE and SEAL Alignment:** The document now explicitly maps ECA roles and concepts to the **WIMSE (Workload Identity in Multi-Cloud Secure Environments)** architecture and details its alignment with the proposed **SEAL (Secure Evidence and Attestation Layer)** working group's goals.
+* **WIMSE and SEAT Alignment:** The document now explicitly maps ECA roles and concepts to the **WIMSE (Workload Identity in Multi-Cloud Secure Environments)** architecture and details its alignment with the **SEAT (Secure Evidence and Attestation Layer)** working group's goals.
 * **Post-Attestation Patterns:** Added a new section that describes the credential lifecycle, stateful attestation renewal, and patterns for chaining attestations to build hierarchical trust.
 
 ### Editorial Changes
