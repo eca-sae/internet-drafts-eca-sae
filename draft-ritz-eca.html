@@ -9,7 +9,7 @@
 <meta content="Muhammad Usama Sardar" name="author">
 <meta content="
        When distributing complex workloads across diverse service providers, a platform-agnostic identity bound to verifiable proof enables operators to decouple access control from underlying infrastructure without compromising security postures at scale. Likewise, it may be desirable to challenge any long-running workload to a dynamic health check in order to maintain assurances of its trustworthiness over time. 
-       This document specifies Entity and Compute Attestation (ECA), a protocol whose properties are being formally modelled that profiles RATS architecture to address both needs. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish an emergent and cryptographically verifiable identity without the use of shared secrets like bearer tokens. The protocol utilizes attested TLS protocol   to define an attestation renewal procedure providing single round-trip verification bound to (D)TLS sessions via TLS Exported Authenticators that directly enables continuous attestation over time. 
+       This document specifies Entity and Compute Attestation (ECA), a protocol whose properties are being formally modelled that profiles RATS architecture to address both needs. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish an emergent and cryptographically verifiable identity without the use of shared secrets like bearer tokens. The protocol utilizes attested TLS protocol   to implement an attestation renewal procedure providing single round-trip verification bound to (D)TLS sessions via TLS Exported Authenticators that directly enables continuous attestation over time. 
        ECA is designed as a supporting component for frameworks like WIMSE and to enhance related projects such as SPIFFE/SPIRE. The security properties of both procedures are being formally analyzed (see Appendix A). 
     " name="description">
 <meta content="xml2rfc 3.31.0" name="generator">
@@ -1258,7 +1258,7 @@ li > p:last-of-type:only-child {
 <section id="section-abstract">
       <h2 id="abstract"><a href="#abstract" class="selfRef">Abstract</a></h2>
 <p id="section-abstract-1">When distributing complex workloads across diverse service providers, a platform-agnostic identity bound to verifiable proof enables operators to decouple access control from underlying infrastructure without compromising security postures at scale. Likewise, it may be desirable to challenge any long-running workload to a dynamic health check in order to maintain assurances of its trustworthiness over time.<a href="#section-abstract-1" class="pilcrow">¶</a></p>
-<p id="section-abstract-2">This document specifies Entity and Compute Attestation (ECA), a protocol whose properties are being formally modelled that profiles RATS architecture to address both needs. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish an emergent and cryptographically verifiable identity without the use of shared secrets like bearer tokens. The protocol utilizes attested TLS protocol <span>[<a href="#I-D.fossati-tls-exported-attestation" class="cite xref">I-D.fossati-tls-exported-attestation</a>]</span> to define an attestation renewal procedure providing single round-trip verification bound to (D)TLS sessions via TLS Exported Authenticators that directly enables continuous attestation over time.<a href="#section-abstract-2" class="pilcrow">¶</a></p>
+<p id="section-abstract-2">This document specifies Entity and Compute Attestation (ECA), a protocol whose properties are being formally modelled that profiles RATS architecture to address both needs. ECA defines an identity bootstrap procedure where Attester and Verifier collaboratively act as an Identity Supplier to establish an emergent and cryptographically verifiable identity without the use of shared secrets like bearer tokens. The protocol utilizes attested TLS protocol <span>[<a href="#I-D.fossati-tls-exported-attestation" class="cite xref">I-D.fossati-tls-exported-attestation</a>]</span> to implement an attestation renewal procedure providing single round-trip verification bound to (D)TLS sessions via TLS Exported Authenticators that directly enables continuous attestation over time.<a href="#section-abstract-2" class="pilcrow">¶</a></p>
 <p id="section-abstract-3">ECA is designed as a supporting component for frameworks like WIMSE and to enhance related projects such as SPIFFE/SPIRE. The security properties of both procedures are being formally analyzed (see Appendix A).<a href="#section-abstract-3" class="pilcrow">¶</a></p>
 </section>
 <div id="status-of-memo">
@@ -1328,6 +1328,20 @@ li > p:last-of-type:only-child {
 </li>
           <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3">
             <p id="section-toc.1-1.3.1"><a href="#section-3" class="auto internal xref">3</a>.  <a href="#name-conventions-and-definitions" class="internal xref">Conventions and Definitions</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1">
+                <p id="section-toc.1-1.3.2.1.1"><a href="#section-3.1" class="auto internal xref">3.1</a>.  <a href="#name-roles" class="internal xref">Roles</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.2">
+                <p id="section-toc.1-1.3.2.2.1"><a href="#section-3.2" class="auto internal xref">3.2</a>.  <a href="#name-eca-protocol-factors" class="internal xref">ECA Protocol Factors</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.3">
+                <p id="section-toc.1-1.3.2.3.1"><a href="#section-3.3" class="auto internal xref">3.3</a>.  <a href="#name-related-concepts" class="internal xref">Related Concepts</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.4">
+                <p id="section-toc.1-1.3.2.4.1"><a href="#section-3.4" class="auto internal xref">3.4</a>.  <a href="#name-artifacts" class="internal xref">Artifacts</a></p>
+</li>
+            </ul>
 </li>
           <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4">
             <p id="section-toc.1-1.4.1"><a href="#section-4" class="auto internal xref">4</a>.  <a href="#name-conceptual-model-informatio" class="internal xref">Conceptual Model (Informational)</a></p>
@@ -1666,11 +1680,11 @@ li > p:last-of-type:only-child {
 <p id="section-1-1">Modern computing infrastructure often bootstraps workload identity using bearer credentials, such as API keys, join tokens, or secrets injected during initialization. While operationally simple, this model's security properties degrade as the number of workloads increases.<a href="#section-1-1" class="pilcrow">¶</a></p>
 <p id="section-1-2">If a single workload has an independent probability p of its bootstrap credential being compromised, the probability of at least one compromise occurring across a fleet of N workloads is <code>1-(1-p)^N</code>. As <code>N</code> grows, this probability approaches certainty. For example, a platform provisioning 1,000 instances per hour presents 24,000 independent opportunities for credential interception daily. A single compromised bearer token can enable persistent impersonation until the event is detected and the credential revoked.<a href="#section-1-2" class="pilcrow">¶</a></p>
 <p id="section-1-3">Concurrently, high-assurance workloads, particularly those in Trusted Execution Environments (TEEs), require not only initial authentication but also continuous verification of their state. A point-in-time check is insufficient to detect compromises that may occur mid-session, creating a need for ongoing, stateful attestation that is cryptographically bound to the active communication channel.<a href="#section-1-3" class="pilcrow">¶</a></p>
-<p id="section-1-4">This document specifies Entity and Compute Attestation (ECA), which addresses this architectural limitation. ECA replaces a reliance on secret possession with interactive, cryptographic proof of a workload's identity and state. This approach provides security guarantees that remain constant per-instance, regardless of fleet size. ECA does not define new cryptographic primitives. Instead, it specifies a protocol that orchestrates standardized RATS architecture <span>[<a href="#RFC9334" class="cite xref">RFC9334</a>]</span>, Entity Attestation Token (EAT) <span>[<a href="#RFC9711" class="cite xref">RFC9711</a>]</span> and IETF-defined cryptography (HPKE <span>[<a href="#RFC9180" class="cite xref">RFC9180</a>]</span>, Ed25519 <span>[<a href="#RFC8032" class="cite xref">RFC8032</a>]</span>) to implement a secure Challenge/Response interaction model <span>[<a href="#I-D.ietf-rats-reference-interaction-models" class="cite xref">I-D.ietf-rats-reference-interaction-models</a>]</span>.<a href="#section-1-4" class="pilcrow">¶</a></p>
+<p id="section-1-4">This document specifies Entity and Compute Attestation (ECA), which addresses this architectural limitation. ECA replaces a reliance on secret possession with interactive, cryptographic proof of a workload's identity and state. This approach provides strong security benefits that remain constant per-instance, regardless of fleet size. ECA does not define new cryptographic primitives. Instead, it specifies a protocol that orchestrates standardized RATS architecture <span>[<a href="#RFC9334" class="cite xref">RFC9334</a>]</span>, Entity Attestation Token (EAT) <span>[<a href="#RFC9711" class="cite xref">RFC9711</a>]</span> and IETF-defined cryptography (HPKE <span>[<a href="#RFC9180" class="cite xref">RFC9180</a>]</span>, Ed25519 <span>[<a href="#RFC8032" class="cite xref">RFC8032</a>]</span>) to implement a secure Challenge/Response interaction model <span>[<a href="#I-D.ietf-rats-reference-interaction-models" class="cite xref">I-D.ietf-rats-reference-interaction-models</a>]</span>.<a href="#section-1-4" class="pilcrow">¶</a></p>
 <p id="section-1-5">ECA has two distinct cryptographic attestation procedures to address each specific concern:<a href="#section-1-5" class="pilcrow">¶</a></p>
 <ol start="1" type="1" class="normal type-1" id="section-1-6">
 <li id="section-1-6.1">
-          <p id="section-1-6.1.1"><strong>Identity Bootstrap procedure</strong> - For initial "cold start" establishment of verifiable identity in environments not yet provisioned. This profile is a concrete instantiations of the Challenge/Response model and provides a comprehensive replacement to the bearer-token model.<a href="#section-1-6.1.1" class="pilcrow">¶</a></p>
+          <p id="section-1-6.1.1"><strong>Identity Bootstrap procedure</strong> - For initial "cold start" establishment of verifiable identity in environments not yet provisioned. This profile is a concrete instantiations of the Challenge/Response model and provides a comprehensive alternative to the bearer-token model in heterogeneous environments.<a href="#section-1-6.1.1" class="pilcrow">¶</a></p>
 </li>
         <li id="section-1-6.2">
           <p id="section-1-6.2.1"><strong>Attestation Renewal procedure</strong> - A lightweight, single round-trip attestation procedure for continuous verification of established identity and state, ideal for long-running workloads and TEEs.<a href="#section-1-6.2.1" class="pilcrow">¶</a></p>
@@ -1797,39 +1811,64 @@ li > p:last-of-type:only-child {
 <a href="#section-3" class="section-number selfRef">3. </a><a href="#name-conventions-and-definitions" class="section-name selfRef">Conventions and Definitions</a>
       </h2>
 <p id="section-3-1">The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in BCP 14 <span>[<a href="#RFC2119" class="cite xref">RFC2119</a>]</span> <span>[<a href="#RFC8174" class="cite xref">RFC8174</a>]</span> when, and only when, they appear in all capitals, as shown here.<a href="#section-3-1" class="pilcrow">¶</a></p>
-<p id="section-3-2"><strong>Attester</strong>: An entity whose trustworthiness is to be evaluated, typically combining hardware, firmware and trusted software deployed in the cloud.<a href="#section-3-2" class="pilcrow">¶</a></p>
-<p id="section-3-3"><strong>Verifier</strong>: Conducts appraisal of Evidence to evaluate trustworthiness of the Attester, enforcing validation gates against reference values.<a href="#section-3-3" class="pilcrow">¶</a></p>
+<div id="roles">
+<section id="section-3.1">
+        <h3 id="name-roles">
+<a href="#section-3.1" class="section-number selfRef">3.1. </a><a href="#name-roles" class="section-name selfRef">Roles</a>
+        </h3>
+<p id="section-3.1-1"><strong>Attester</strong>: An entity whose trustworthiness is to be evaluated, typically combining hardware, firmware and trusted software deployed in the cloud.<a href="#section-3.1-1" class="pilcrow">¶</a></p>
+<p id="section-3.1-2"><strong>Verifier</strong>: Conducts appraisal of Evidence to evaluate trustworthiness of the Attester, enforcing validation gates against reference values.<a href="#section-3.1-2" class="pilcrow">¶</a></p>
 <ul class="compact">
-<li class="compact" id="section-3-4.1">
-          <p id="section-3-4.1.1">The Verifier's appraisal relies on trust relationships with supply chain roles:<a href="#section-3-4.1.1" class="pilcrow">¶</a></p>
+<li class="compact" id="section-3.1-3.1">
+            <p id="section-3.1-3.1.1">The Verifier's appraisal relies on trust relationships with supply chain roles:<a href="#section-3.1-3.1.1" class="pilcrow">¶</a></p>
 <ul class="compact">
-<li class="compact" id="section-3-4.1.2.1">
-              <strong>Endorsers</strong> (e.g., hardware manufacturers) provide cryptographic identity<a href="#section-3-4.1.2.1" class="pilcrow">¶</a>
+<li class="compact" id="section-3.1-3.1.2.1">
+                <strong>Endorsers</strong> (e.g., hardware manufacturers) provide cryptographic identity<a href="#section-3.1-3.1.2.1" class="pilcrow">¶</a>
 </li>
-            <li class="compact" id="section-3-4.1.2.2">
-              <strong>Reference Value Providers</strong> supply expected measurements for appraisal<a href="#section-3-4.1.2.2" class="pilcrow">¶</a>
+              <li class="compact" id="section-3.1-3.1.2.2">
+                <strong>Reference Value Providers</strong> supply expected measurements for appraisal<a href="#section-3.1-3.1.2.2" class="pilcrow">¶</a>
 </li>
-            <li class="compact" id="section-3-4.1.2.3">
-              <strong>Identity Suppliers</strong> establish the Attester's cryptographic identity<a href="#section-3-4.1.2.3" class="pilcrow">¶</a>
+            </ul>
 </li>
-          </ul>
-</li>
-      </ul>
-<p id="section-3-5"><strong>Relying Party</strong>: Consumes signed Attestation Results to make authorization decisions.<a href="#section-3-5" class="pilcrow">¶</a></p>
-<p id="section-3-6"><strong>Verifying Relying Party (VRP)</strong>: An entity that fulfills the roles of both Verifier and Relying Party. This document adopts the term from <span>[<a href="#Sardar2025-Perspicuity" class="cite xref">Sardar2025-Perspicuity</a>]</span>, which merges these roles to align with common industry deployments and reduce privacy concerns. In the context of ECA, a VRP is the entity that directly appraises Evidence from an Attester during an attestation renewal procedure to make an authorization decision.<a href="#section-3-6" class="pilcrow">¶</a></p>
-<p id="section-3-7"><strong>Identity Supplier:</strong> A supply chain role associated with giving a cryptographic identity to the Attester. <span>[<a href="#Sardar2025-Perspicuity" class="cite xref">Sardar2025-Perspicuity</a>]</span> introduces this role to represent entities like hardware manufacturers or local CAs that provision the Attester. In the context of ECA, this role is collaboratively fulfilled by the Attester and Verifier, rather than being a separate, centralized provisioning authority. The identity is not pre-installed but <em>emerges deterministically</em> from the identity bootstrap procedure. In this procedure, the Attester generates its identity claims based on its inherent properties (<code>IF</code>), and the Verifier cryptographically ratifies them by issuing a signed Attestation Result.<a href="#section-3-7" class="pilcrow">¶</a></p>
-<p id="section-3-8"><strong>Evidence:</strong> A set of claims produced by an Attester about its state, cryptographically signed by the Attester itself. In ECA, this typically takes the form of a signed EAT containing claims such as the EUID, IHB, and Proof-of-Possession.<a href="#section-3-8" class="pilcrow">¶</a></p>
-<p id="section-3-9"><strong>Entity Attestation Token (EAT):</strong> A standardized token format <span>[<a href="#RFC9711" class="cite xref">RFC9711</a>]</span> used to convey attestation evidence in a cryptographically verifiable form.<a href="#section-3-9" class="pilcrow">¶</a></p>
-<p id="section-3-10"><strong>Attestation Result (AR):</strong> A signed statement from a Verifier asserting the outcome of the appraisal of an Attester's Evidence. In ECA, this is a separate artifact from the Evidence, signed by the Verifier's long-term identity key.<a href="#section-3-10" class="pilcrow">¶</a></p>
-<p id="section-3-11"><strong>Handle:</strong> In ECA, the <code>Handle</code> as defined in [I-D.ietf-rats-reference-interaction-models] is realized through the combination of a public Binding Factor and a Verifier-supplied freshness value (e.g., a nonce or session context), eliminating the need for a trusted third-party Handle Distributor.<a href="#section-3-11" class="pilcrow">¶</a></p>
-<p id="section-3-12"><strong>Binding Factor (BF):</strong> Scopes an attestation procedure to a specific context. In ECA procedures, the <code>BF</code>, in combination with a Verifier-issued nonce or session context, collectively serves as the Handle for the interaction. The <code>BF</code> does not require confidentiality; protocol security relies on its binding to the Instance Factor, not secrecy.<a href="#section-3-12" class="pilcrow">¶</a></p>
-<p id="section-3-13"><strong>Instance Factor (IF):</strong> Platform Evidence. An inherent, measurable property of the instance that is verifiable by the Verifier. The <code>IF</code> value itself is confidential and MUST never be transmitted directly; instead, the Attester proves possession through cryptographic means (e.g., signature, quote, attestation report).<a href="#section-3-13" class="pilcrow">¶</a></p>
-<p id="section-3-14"><strong>Validator Factor (VF):</strong> A secret, ephemeral challenge generated and released by the Verifier during <em>identity bootstrap procedures</em> after successful initial authentication of <code>BF</code>+<code>IF</code> possession. The <code>VF</code> MUST be bound to the <code>IF</code> (e.g., <code>VF = SHA-256(seed || IF)</code>) to mitigate against session confusion attacks.<a href="#section-3-14" class="pilcrow">¶</a></p>
-<p id="section-3-15"><strong>Renewal Factor (RF):</strong> A cryptographic credential proving identity continuity. Following a full ECA identity lifecycle, <code>RF</code> is the signed <em>Attestation Result (AR)</em> issued by a Verifier from a prior bootstrap or renewal procedure. It is presented by an Attester as proof of an established identity.<a href="#section-3-15" class="pilcrow">¶</a></p>
-<p id="section-3-16"><strong>Instance Factor Pattern (IFP):</strong> The set of defined methods for sourcing the private value for Instance Factor (<code>IF</code>). Three patterns are defined: hardware-rooted (Pattern A), orchestrator-provisioned (Pattern B), and artifact-based (Pattern C). For detailed specifications, see <span><a href="#instance-factor-patterns-ifp">#instance-factor-patterns-ifp</a></span>.<a href="#section-3-16" class="pilcrow">¶</a></p>
-<p id="section-3-17"><strong>Joint Factor Possession:</strong> The cryptographic property where security derives from proving knowledge of multiple factors (<code>BF</code>+<code>VF</code> for bootstrap, <code>BF</code>+<code>RF</code>+<code>IF</code> for attestation renewal) rather than secrecy of individual components.<a href="#section-3-17" class="pilcrow">¶</a></p>
-<p id="section-3-18"><strong>Integrity Hash Beacon (IHB):</strong> A SHA-256 binding of <code>BF</code> to <code>IF</code> that enables exposure-tolerant authentication while preventing pre-computation attacks to mitigate MiTM threats.<a href="#section-3-18" class="pilcrow">¶</a></p>
-<p id="section-3-19"><strong>Exchange Identifier (eca_uuid):</strong> A unique identifier for each attestation lifecycle instance, used to construct artifact repository paths.<a href="#section-3-19" class="pilcrow">¶</a></p>
+        </ul>
+<p id="section-3.1-4"><strong>Relying Party</strong>: Consumes signed Attestation Results to make authorization decisions.<a href="#section-3.1-4" class="pilcrow">¶</a></p>
+<p id="section-3.1-5"><strong>Verifying Relying Party (VRP)</strong>: An entity that fulfills the roles of both Verifier and Relying Party. This document adopts the term from <span>[<a href="#Sardar2025-Perspicuity" class="cite xref">Sardar2025-Perspicuity</a>]</span>, which merges these roles to align with common industry deployments and reduce privacy concerns. In the context of ECA, a VRP is the entity that directly appraises Evidence from an Attester during an attestation renewal procedure to make an authorization decision.<a href="#section-3.1-5" class="pilcrow">¶</a></p>
+<p id="section-3.1-6"><strong>Identity Supplier:</strong> A supply chain role associated with giving a cryptographic identity to the Attester. <span>[<a href="#Sardar2025-Perspicuity" class="cite xref">Sardar2025-Perspicuity</a>]</span> introduces this role to represent entities like hardware manufacturers or local CAs that provision the Attester. In the context of ECA, this role is collaboratively fulfilled by the Attester and Verifier, rather than being a separate, centralized provisioning authority. The identity is not pre-installed but <em>emerges deterministically</em> from the identity bootstrap procedure. In this procedure, the Attester generates its identity claims based on its inherent properties (<code>IF</code>), and the Verifier cryptographically ratifies them by issuing a signed Attestation Result.<a href="#section-3.1-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="eca-protocol-factors">
+<section id="section-3.2">
+        <h3 id="name-eca-protocol-factors">
+<a href="#section-3.2" class="section-number selfRef">3.2. </a><a href="#name-eca-protocol-factors" class="section-name selfRef">ECA Protocol Factors</a>
+        </h3>
+<p id="section-3.2-1"><strong>Binding Factor (BF):</strong> Scopes an attestation procedure to a specific context. In ECA procedures, the <code>BF</code>, in combination with a Verifier-issued nonce or session context, collectively serves as the Handle for the interaction. The <code>BF</code> does not require confidentiality; protocol security relies on its binding to the Instance Factor, not secrecy.<a href="#section-3.2-1" class="pilcrow">¶</a></p>
+<p id="section-3.2-2"><strong>Instance Factor (IF):</strong> Platform Evidence. An inherent, measurable property of the instance that is verifiable by the Verifier. The <code>IF</code> value itself is confidential and MUST never be transmitted directly; instead, the Attester proves possession through cryptographic means (e.g., signature, quote, attestation report).<a href="#section-3.2-2" class="pilcrow">¶</a></p>
+<p id="section-3.2-3"><strong>Validator Factor (VF):</strong> A secret, ephemeral challenge generated and released by the Verifier during <em>identity bootstrap procedures</em> after successful initial authentication of <code>BF</code>+<code>IF</code> possession. The <code>VF</code> MUST be bound to the <code>IF</code> (e.g., <code>VF = SHA-256(seed || IF)</code>) to mitigate against session confusion attacks.<a href="#section-3.2-3" class="pilcrow">¶</a></p>
+<p id="section-3.2-4"><strong>Renewal Factor (RF):</strong> A cryptographic credential proving identity continuity. Following a full ECA identity lifecycle, <code>RF</code> is the signed <em>Attestation Result (AR)</em> issued by a Verifier from a prior bootstrap or renewal procedure. It is presented by an Attester as proof of an established identity.<a href="#section-3.2-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="related-concepts">
+<section id="section-3.3">
+        <h3 id="name-related-concepts">
+<a href="#section-3.3" class="section-number selfRef">3.3. </a><a href="#name-related-concepts" class="section-name selfRef">Related Concepts</a>
+        </h3>
+<p id="section-3.3-1"><strong>Evidence:</strong> A set of claims produced by an Attester about its state, cryptographically signed by the Attester itself. In ECA, this typically takes the form of a signed EAT containing claims such as the EUID, IHB, and Proof-of-Possession.<a href="#section-3.3-1" class="pilcrow">¶</a></p>
+<p id="section-3.3-2"><strong>Instance Factor Pattern (IFP):</strong> The set of defined methods for sourcing the private value for Instance Factor (<code>IF</code>). Three patterns are defined: hardware-rooted (Pattern A), orchestrator-provisioned (Pattern B), and artifact-based (Pattern C). For detailed specifications, see <span><a href="#instance-factor-patterns-ifp">#instance-factor-patterns-ifp</a></span>.<a href="#section-3.3-2" class="pilcrow">¶</a></p>
+<p id="section-3.3-3"><strong>Handle:</strong> In ECA, the <code>Handle</code> as defined in [I-D.ietf-rats-reference-interaction-models] can be realized through the combination of a public Binding Factor and a Verifier-supplied freshness value (e.g., a nonce or session context).<a href="#section-3.3-3" class="pilcrow">¶</a></p>
+<p id="section-3.3-4"><strong>Joint Factor Possession:</strong> The cryptographic property where security derives from proving knowledge of multiple factors (<code>BF</code>+<code>VF</code> for bootstrap, <code>BF</code>+<code>RF</code>+<code>IF</code> for attestation renewal) rather than secrecy of individual components.<a href="#section-3.3-4" class="pilcrow">¶</a></p>
+<p id="section-3.3-5"><strong>Exchange Identifier (eca_uuid):</strong> A unique identifier for each attestation lifecycle instance, used to construct artifact repository paths.<a href="#section-3.3-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="artifacts">
+<section id="section-3.4">
+        <h3 id="name-artifacts">
+<a href="#section-3.4" class="section-number selfRef">3.4. </a><a href="#name-artifacts" class="section-name selfRef">Artifacts</a>
+        </h3>
+<p id="section-3.4-1"><strong>Integrity Hash Beacon (IHB):</strong> A SHA-256 binding of <code>BF</code> to <code>IF</code> that enables exposure-tolerant authentication while preventing pre-computation attacks to mitigate MiTM threats.<a href="#section-3.4-1" class="pilcrow">¶</a></p>
+<p id="section-3.4-2"><strong>Entity Attestation Token (EAT):</strong> A standardized token format <span>[<a href="#RFC9711" class="cite xref">RFC9711</a>]</span> used to convey attestation evidence in a cryptographically verifiable form.<a href="#section-3.4-2" class="pilcrow">¶</a></p>
+<p id="section-3.4-3"><strong>Attestation Result (AR):</strong> A signed statement from a Verifier asserting the outcome of the appraisal of an Attester's Evidence. In ECA, this is a separate artifact from the Evidence, signed by the Verifier's long-term identity key.<a href="#section-3.4-3" class="pilcrow">¶</a></p>
+</section>
+</div>
 </section>
 </div>
 <div id="conceptual-model">
@@ -2140,7 +2179,7 @@ Where: RF = prior AR proving identity continuity
                 <p id="section-4.5.1.1-1.1.1"><strong>Foundation:</strong> Hardware Root of Trust (HRoT).<a href="#section-4.5.1.1-1.1.1" class="pilcrow">¶</a></p>
 </li>
               <li class="normal" id="section-4.5.1.1-1.2">
-                <p id="section-4.5.1.1-1.2.1"><strong>Primary Benefit:</strong> This pattern is designed to mitigate the threat of a <em>malicious or compromised provider</em>, including a compromised hypervisor. By anchoring the <code>IF</code> in hardware, ECA ensures that the proof of identity is not only rooted in a trusted component but is also strongly <em>proven</em> and demonstrated <em>fresh</em> for each session, preventing the replay of previously valid attestations even in a hostile environment.<a href="#section-4.5.1.1-1.2.1" class="pilcrow">¶</a></p>
+                <p id="section-4.5.1.1-1.2.1"><strong>Primary Benefit:</strong> This pattern is designed to mitigate the threat of a <em>malicious or compromised provider</em>, including a compromised hypervisor. By anchoring the <code>IF</code> in hardware, ECA leverages the inherent proof of identity rooted in the trusted hardware component itself, so that proof of cryptographic binding is <em>demonstrated</em> and proven <em>fresh</em> for each session, preventing the replay of previously valid attestations.<a href="#section-4.5.1.1-1.2.1" class="pilcrow">¶</a></p>
 </li>
             </ul>
 </section>
@@ -2155,7 +2194,7 @@ Where: RF = prior AR proving identity continuity
                 <p id="section-4.5.1.2-1.1.1"><strong>Foundation:</strong> Trust in a centralized control plane, like Kubernetes.<a href="#section-4.5.1.2-1.1.1" class="pilcrow">¶</a></p>
 </li>
               <li class="normal" id="section-4.5.1.2-1.2">
-                <p id="section-4.5.1.2-1.2.1"><strong>Primary Benefit:</strong> This pattern mitigates against <em>network-level attackers</em> attempting to impersonate a workload. By requiring an interactive proof, ECA ensures that the workload's identity is not only <em>demonstrated</em> via the trusted orchestrator but is also verified with a strong <em>freshness</em> signal. This interactive proof model directly mitigates the risks of a stolen bearer token being replayed, as the proof is unique to the current session and cryptographically bound to its context.<a href="#section-4.5.1.2-1.2.1" class="pilcrow">¶</a></p>
+                <p id="section-4.5.1.2-1.2.1"><strong>Primary Benefit:</strong> This pattern mitigates against <em>network-level attackers</em> attempting to impersonate a workload. By requiring an interactive proof, ECA tests that the workload's identity is not only <em>demonstrated</em> via the trusted orchestrator but is also verified with a strong <em>freshness</em> signal. This interactive proof model directly mitigates the risks of a stolen bearer token being replayed, as the proof is unique to the current session and cryptographically bound to its context.<a href="#section-4.5.1.2-1.2.1" class="pilcrow">¶</a></p>
 </li>
             </ul>
 </section>
@@ -2170,7 +2209,7 @@ Where: RF = prior AR proving identity continuity
                 <p id="section-4.5.1.3-1.1.1"><strong>Foundation:</strong> The integrity of the provisioning process and the artifact itself.<a href="#section-4.5.1.3-1.1.1" class="pilcrow">¶</a></p>
 </li>
               <li class="normal" id="section-4.5.1.3-1.2">
-                <p id="section-4.5.1.3-1.2.1"><strong>Primary Benefit:</strong> This pattern is primarily designed to mitigate <em>Trust-on-First-Use (TOFU) vulnerabilities and race conditions</em>. By requiring an interactive proof, it guarantees that the identity is <em>demonstrated</em> for a specific context and, through its <em>freshness</em> mechanism, ensures that the proof is live and not a replay. This prevents a faster, malicious workload from hijacking the identity by replaying a captured or prematurely accessed artifact.<a href="#section-4.5.1.3-1.2.1" class="pilcrow">¶</a></p>
+                <p id="section-4.5.1.3-1.2.1"><strong>Primary Benefit:</strong> This pattern is primarily designed to mitigate <em>Trust-on-First-Use (TOFU) vulnerabilities and race conditions</em>. By requiring an interactive proof, it guarantees that the identity is <em>demonstrated</em> for a specific context and, through its <em>freshness</em> mechanism, indicates that the proof is live and not a replay. This prevents a faster, malicious workload from hijacking the identity by replaying a captured or prematurely accessed artifact.<a href="#section-4.5.1.3-1.2.1" class="pilcrow">¶</a></p>
 </li>
             </ul>
 </section>
@@ -2192,7 +2231,7 @@ Where: RF = prior AR proving identity continuity
         <h3 id="name-minimal-deployment-develope">
 <a href="#section-5.1" class="section-number selfRef">5.1. </a><a href="#name-minimal-deployment-develope" class="section-name selfRef">Minimal Deployment: Developer Workflow (IFP Pattern C)</a>
         </h3>
-<p id="section-5.1-1">This pattern demonstrates that strong, verifiable identity does not require complex infrastructure. ECA provides a high-assurance, cryptographically-bound identity with minimal prerequisites, offering security guarantees superior to bearer tokens at a fraction of the operational overhead required to deploy and manage a full identity framework in small-scale environments.<a href="#section-5.1-1" class="pilcrow">¶</a></p>
+<p id="section-5.1-1">This pattern demonstrates that strong, verifiable identity does not require complex infrastructure. ECA provides a higher-assurance, cryptographically-bound identity with minimal prerequisites, offering security benefits over the use of bearer tokens, while avoiding the operational overhead required to deploy and manage a full identity framework in small-scale environments.<a href="#section-5.1-1" class="pilcrow">¶</a></p>
 <p id="section-5.1-2"><strong>Scenario</strong>: Developer needs secure access to temporary cloud VMs for testing.<a href="#section-5.1-2" class="pilcrow">¶</a></p>
 <ul class="compact">
 <li class="compact" id="section-5.1-3.1">
@@ -2245,7 +2284,7 @@ Where: RF = prior AR proving identity continuity
         <h3 id="name-high-assurance-multi-cloud-">
 <a href="#section-5.3" class="section-number selfRef">5.3. </a><a href="#name-high-assurance-multi-cloud-" class="section-name selfRef">High-Assurance Multi-Cloud Portable Identity (Hybrid IFP A + B)</a>
         </h3>
-<p id="section-5.3-1">This pattern provides a portable identity that survives migration across trust domains without degrading security posture. ECA allows organizations to leverage the high assurance of Hardware Roots of Trust (HRoT) for Pattern A while maintaining consistent, verifiable identity for standard workloads, achieving vendor independence without reverting to less-secure bearer tokens.<a href="#section-5.3-1" class="pilcrow">¶</a></p>
+<p id="section-5.3-1">This pattern provides a portable identity protocol that survives migration across trust domains, allowing a single Verifier to appraise and enforce policy based on the distinct security posture of each workload. ECA allows organizations to leverage the high assurance of Hardware Roots of Trust (HRoT) for Pattern A while maintaining consistent, verifiable identity for standard workloads, achieving vendor independence without reverting to less-secure bearer tokens.<a href="#section-5.3-1" class="pilcrow">¶</a></p>
 <p id="section-5.3-2"><strong>Scenario</strong>: An organization requiring a consistent identity mechanism across a heterogeneous fleet of workloads. The fleet consists of both high-assurance, hardware-protected services and standard-assurance, software-based applications deployed across multiple cloud and on-premises environments.<a href="#section-5.3-2" class="pilcrow">¶</a></p>
 <ul class="compact">
 <li class="compact" id="section-5.3-3.1">
@@ -2395,16 +2434,15 @@ Where: RF = prior AR proving identity continuity
         </h3>
 <p id="section-6.3-1">The ECA protocol is designed to complement and enhance the SPIFFE/SPIRE framework by providing a standardized, interactive protocol for node attestation. SPIFFE/SPIRE's extensible node attestor architecture provides a clear integration path for new attestation methods, and ECA offers a mechanism specifically designed for environments where provider metadata is insufficient or unavailable.<a href="#section-6.3-1" class="pilcrow">¶</a></p>
 <p id="section-6.3-2">For environments lacking a hardware root of trust, SPIRE's primary software-based bootstrap method is the Join Token. As a bearer token, its security model relies on the confidentiality of the token during delivery; if the token is intercepted or leaked, an attacker can use it to enroll a rogue workload.<a href="#section-6.3-2" class="pilcrow">¶</a></p>
-<p id="section-6.3-3">The ECA identity bootstrap procedure presents a path for a next-generation, built-in SPIRE node attestor that operates without bearer tokens. By implementing ECA natively, the SPIRE agent could act as the ECA Attester and the SPIRE server as the ECA Verifier. This would evolve the enrollment model by replacing the dependency on "possession of a secret" with a model based on an interactive, challenge-response proof of the compute instance's identity. This approach, which uses measurable properties of the instance itself, is designed to drastically reduce the risk of impersonation.<a href="#section-6.3-3" class="pilcrow">¶</a></p>
-<p id="section-6.3-4">Beyond initial bootstrapping, the ECA <em>attestation renewal procedure</em> offers a standardized mechanism for periodic, stateful health checks. A native ECA node attestor would leverage this renewal procedure to enable SPIRE to perform continuous health verification of the node itself, beyond the initial attestation, a critical requirement for modern infrastructure.<a href="#section-6.3-4" class="pilcrow">¶</a></p>
-<p id="section-6.3-5">In this integrated model, a successful ECA bootstrap would conclude with an Attestation Result (AR) containing verifiable claims. The SPIRE server, acting as the Verifier, would validate this AR and use its claims (e.g., <code>eca_uuid</code>, EUID, <code>IHB</code>) as selectors for a secure registration policy, admitting the node to issue SVIDs as usual.<a href="#section-6.3-5" class="pilcrow">¶</a></p>
-<div class="alignLeft art-text artwork" id="section-6.3-6">
+<p id="section-6.3-3">The ECA identity bootstrap procedure presents a path for a next-generation, built-in SPIRE node attestor that operates without bearer tokens. By implementing ECA natively, the SPIRE agent could act as the ECA Attester and the SPIRE server as the ECA Verifier. This would evolve the enrollment model by replacing the dependency on "possession of a secret" with a model based on an interactive, challenge-response proof of the compute instance's identity. This approach, which uses measurable properties of the instance itself adds another layer of defence when aiming to mitigate the risk of impersonation.<a href="#section-6.3-3" class="pilcrow">¶</a></p>
+<p id="section-6.3-4">In this integrated model, a successful ECA bootstrap would conclude with an Attestation Result (AR) containing verifiable claims. The SPIRE server, acting as the Verifier, would validate this AR and use its claims (e.g., <code>eca_uuid</code>, EUID, <code>IHB</code>) as selectors for a secure registration policy, admitting the node to issue SVIDs as usual.<a href="#section-6.3-4" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-6.3-5">
 <pre># Example of SPIRE registration entry using selectors from a native ECA attestor
 spire-server entry create -spiffeID "spiffe://example.org/my-service"
 -parentID "spiffe://example.org/spire/agent/eca/&lt;verifier_id&gt;"
 -selector "eca:euid:a1b2c3d4..."
 -selector "eca:ihb:e5f6g7h8..."
-</pre><a href="#section-6.3-6" class="pilcrow">¶</a>
+</pre><a href="#section-6.3-5" class="pilcrow">¶</a>
 </div>
 </section>
 </div>
@@ -2504,7 +2542,7 @@ spire-server entry create -spiffeID "spiffe://example.org/my-service"
           <strong>Factor Independence:</strong> <code>BF</code> and Instance Factor (IF) MUST be computationally independent.<a href="#section-7-2.5" class="pilcrow">¶</a>
 </li>
         <li id="section-7-2.6">
-          <strong>Instance Factor Structure:</strong> The Instance Factor MUST be a structured, verifiable claim about instance properties rather than random entropy. The Instance Factor SHOULD take recognizable forms such as vendor-assigned identifiers (UUIDs, instance IDs), hardware attestation outputs (TPM quotes, TEE reports), or deterministic measurements (content hashes, configuration digests). Implementations MUST NOT use randomly generated secrets as Instance Factors. This structural requirement ensures that factor independence violations during provisioning produce detectably malformed attestations.<a href="#section-7-2.6" class="pilcrow">¶</a>
+          <strong>Instance Factor Structure:</strong> The Instance Factor MUST be a structured, verifiable claim about instance properties rather than random entropy. The Instance Factor SHOULD take recognizable forms such as vendor-assigned identifiers (UUIDs, instance IDs), hardware attestation outputs (TPM quotes, TEE reports), or deterministic measurements (content hashes, configuration digests). Implementations MUST NOT use randomly generated secrets as Instance Factors. This structural requirement enforces factor independence and cause violations during provisioning to produce detectably malformed attestations.<a href="#section-7-2.6" class="pilcrow">¶</a>
 </li>
       </ol>
 </section>
@@ -2587,7 +2625,7 @@ spire-server entry create -spiffeID "spiffe://example.org/my-service"
               </ul>
 </li>
             <li id="section-8.1.2-1.4">
-              <p id="section-8.1.2-1.4.1"><strong>Nonce Match:</strong> Ensures the nonce in the EAT matches the nonce the Verifier issued in Phase 2, proving freshness.<a href="#section-8.1.2-1.4.1" class="pilcrow">¶</a></p>
+              <p id="section-8.1.2-1.4.1"><strong>Nonce Match:</strong> Tests that the nonce in the EAT matches the nonce the Verifier issued in Phase 2, proving freshness.<a href="#section-8.1.2-1.4.1" class="pilcrow">¶</a></p>
 <ul class="compact">
 <li class="compact" id="section-8.1.2-1.4.2.1">Failure Action: Immediate termination. Publish error status <code>NONCE_MISMATCH</code>.<a href="#section-8.1.2-1.4.2.1" class="pilcrow">¶</a>
 </li>
@@ -2875,7 +2913,7 @@ spire-server entry create -spiffeID "spiffe://example.org/my-service"
               </ul>
 </li>
             <li id="section-10.2.1-2.4">
-              <p id="section-10.2.1-2.4.1"><strong>Freshness Binding</strong>: Ensures attestation_procedure_id is unique and properly bound<a href="#section-10.2.1-2.4.1" class="pilcrow">¶</a></p>
+              <p id="section-10.2.1-2.4.1"><strong>Freshness Binding</strong>: Checks that attestation_procedure_id is unique and properly bound<a href="#section-10.2.1-2.4.1" class="pilcrow">¶</a></p>
 <ul class="compact">
 <li class="compact" id="section-10.2.1-2.4.2.1">Failure: <code>REPLAY_DETECTED</code> or <code>BINDING_INVALID</code><a href="#section-10.2.1-2.4.2.1" class="pilcrow">¶</a>
 </li>
@@ -2916,7 +2954,7 @@ spire-server entry create -spiffeID "spiffe://example.org/my-service"
                 <strong>attestation_procedure_id</strong>: <code>certificate_request_context</code> from CertificateRequest<a href="#section-10.2.2.1-2.4" class="pilcrow">¶</a>
 </li>
             </ul>
-<p id="section-10.2.2.1-3"><strong>Freshness</strong>: Cryptographic binding of Quote to session context ensures per-connection freshness.<a href="#section-10.2.2.1-3" class="pilcrow">¶</a></p>
+<p id="section-10.2.2.1-3"><strong>Freshness</strong>: Cryptographic binding of Quote to session context provides evidence for per-connection freshness.<a href="#section-10.2.2.1-3" class="pilcrow">¶</a></p>
 <p id="section-10.2.2.1-4"><strong>Security</strong>: TLS 1.3 forward secrecy + RF validation + Quote appraisal<a href="#section-10.2.2.1-4" class="pilcrow">¶</a></p>
 <p id="section-10.2.2.1-5">See <span><a href="#concrete-example-continuous-tee-attestation-over-dtls">#concrete-example-continuous-tee-attestation-over-dtls</a></span> for a complete example.<a href="#section-10.2.2.1-5" class="pilcrow">¶</a></p>
 </section>
@@ -3041,7 +3079,7 @@ spire-server entry create -spiffeID "spiffe://example.org/my-service"
 <p id="section-12.6-1">ECA is designed to address two key threat models: the <strong>Network Attacker</strong> (a Dolev-Yao-style MiTM who controls communication but not participant state) and the <strong>Malicious Provider</strong> (a privileged insider with control-plane access). Preliminary analysis from an exploratory ProVerif model suggests that the protocol, as modelled, defeats the Network Attacker through its cryptographic binding and joint possession proofs.<a href="#section-12.6-1" class="pilcrow">¶</a></p>
 <p id="section-12.6-2">The choice of Instance Factor Pattern directly maps to the desired security goals:
 -   <strong>IFP Patterns B and C</strong> are sufficient for workload portability and standardization. They protect against Network Attackers but assume the underlying infrastructure provider is trusted.
--   <strong>IFP Pattern A</strong> is designed for high-assurance and zero-trust environments. By anchoring the <code>IF</code> in a hardware root of trust (HRoT), it is sufficient to mitigate the Malicious Provider threat model.<a href="#section-12.6-2" class="pilcrow">¶</a></p>
+-   <strong>IFP Pattern A</strong> is designed for high-assurance and zero-trust environments. By anchoring the <code>IF</code> in a hardware root of trust (HRoT), IFP Pattern A is designed to mitigate the Malicious Provider threat model.<a href="#section-12.6-2" class="pilcrow">¶</a></p>
 </section>
 </div>
 <div id="attester-state-compromise">
@@ -3096,7 +3134,7 @@ spire-server entry create -spiffeID "spiffe://example.org/my-service"
 <p id="section-12.9.1.1-2">If an ephemeral procedure key is compromised during an active bootstrap procedure, an attacker could:
 - Inject forged (VF', nonce') pairs for that specific procedure
 - Cause the Attester to derive incorrect final identity keys<a href="#section-12.9.1.1-2" class="pilcrow">¶</a></p>
-<p id="section-12.9.1.1-3">However, the protocol's cryptographic design ensures this only enables denial of service, not authentication bypass:
+<p id="section-12.9.1.1-3">However, preliminary results from the formal analysis of the protocol's cryptographic design suggests this only enables denial of service, not authentication bypass:
 - The resulting Evidence will contain wrong nonce (fails Gate 8)
 - Wrong <code>pop_tag</code> (fails Gate 9)<br>
 - No legitimate Verifier should accept this Evidence<a href="#section-12.9.1.1-3" class="pilcrow">¶</a></p>
@@ -3254,13 +3292,13 @@ spire-server entry create -spiffeID "spiffe://example.org/my-service"
 <a href="#appendix-A" class="section-number selfRef">Appendix A. </a><a href="#name-preliminary-formal-modellin" class="section-name selfRef">Preliminary Formal Modelling (Informative)</a>
       </h2>
 <p id="appendix-A-1">Note that the formal analysis is currently a work-in-progress. This appendix presents the preliminary and ongoing formal security analyses of the ECA <strong>identity bootstrap procedure</strong> and the <strong>attestation renewal procedure</strong> using ProVerif (tracked at <a href="https://github.com/eca-sae/internet-drafts-eca-sae/tree/pv.0.6.0/formal-model">https://github.com/eca-sae/internet-drafts-eca-sae/tree/pv.0.6.0/formal-model</a>. The analysis assumes a Dolev–Yao network attacker and verifies core security properties for each procedure. The model assumes a powerful Dolev-Yao network attacker who can intercept, modify, and inject messages. It also models the Binding Factor (<code>BF</code>) as public knowledge from the start, as per the protocol's "exposure tolerance" principle (<span><a href="#core-design-principles">#core-design-principles</a></span>).<a href="#appendix-A-1" class="pilcrow">¶</a></p>
-<p id="appendix-A-2">The analysis was conducted in two parts: examination of the core security properties against a network attacker, and an analysis of the protocol's behavior under specific key compromise scenarios to define its security boundaries.<a href="#appendix-A-2" class="pilcrow">¶</a></p>
+<p id="appendix-A-2">The analysis was conducted in two parts: examination of the core security properties against a network attacker, and an analysis of the protocol's behavior under specific key compromise scenarios to explore its security boundaries.<a href="#appendix-A-2" class="pilcrow">¶</a></p>
 <div id="core-security-properties-bootstrap-model">
 <section id="appendix-A.1">
         <h3 id="name-core-security-properties-bo">
 <a href="#appendix-A.1" class="section-number selfRef">A.1. </a><a href="#name-core-security-properties-bo" class="section-name selfRef">Core Security Properties (Bootstrap)</a>
         </h3>
-<p id="appendix-A.1-1">In the baseline model, all core security goals were successfully shown to hold against a network attacker.<a href="#appendix-A.1-1" class="pilcrow">¶</a></p>
+<p id="appendix-A.1-1">In the baseline model, preliminary results indicate all core security goals were successfully shown to hold against a network attacker.<a href="#appendix-A.1-1" class="pilcrow">¶</a></p>
 <table class="center" id="table-8">
           <caption><a href="#table-8" class="selfRef">Table 8</a></caption>
 <thead>
@@ -3398,7 +3436,7 @@ spire-server entry create -spiffeID "spiffe://example.org/my-service"
         <h3 id="name-boundary-analysis-advanced-">
 <a href="#appendix-A.3" class="section-number selfRef">A.3. </a><a href="#name-boundary-analysis-advanced-" class="section-name selfRef">Boundary Analysis (Advanced Threat Models)</a>
         </h3>
-<p id="appendix-A.3-1">Additional tests were performed to formally define the protocol's security boundaries under specific compromise scenarios.<a href="#appendix-A.3-1" class="pilcrow">¶</a></p>
+<p id="appendix-A.3-1">Additional tests were performed to formally explore the protocol's security boundaries under specific compromise scenarios.<a href="#appendix-A.3-1" class="pilcrow">¶</a></p>
 <div id="key-compromise-impersonation-kci">
 <section id="appendix-A.3.1">
           <h4 id="name-key-compromise-impersonatio">
@@ -3418,7 +3456,7 @@ spire-server entry create -spiffeID "spiffe://example.org/my-service"
               <p id="appendix-A.3.2-2.1.1"><strong>Result:</strong> The model demonstrated that an attacker can inject arbitrary (VF', nonce') pairs, breaking the Freshness property (<code>event(AttesterUsesNonce(n)) ==&gt; event(VerifierGeneratesNonce(n))</code> was <strong>False</strong>).<a href="#appendix-A.3.2-2.1.1" class="pilcrow">¶</a></p>
 </li>
             <li class="normal" id="appendix-A.3.2-2.2">
-              <p id="appendix-A.3.2-2.2.1"><strong>Interpretation:</strong> While the preliminary formal model identifies a freshness violation, the protocol's cryptographic design ensures this only enables denial of service, not authentication bypass:<a href="#appendix-A.3.2-2.2.1" class="pilcrow">¶</a></p>
+              <p id="appendix-A.3.2-2.2.1"><strong>Interpretation:</strong> While the preliminary formal model identifies a freshness violation, the protocol's cryptographic design suggests this only enables denial of service, not authentication bypass:<a href="#appendix-A.3.2-2.2.1" class="pilcrow">¶</a></p>
 </li>
             <li class="normal" id="appendix-A.3.2-2.3">
               <p id="appendix-A.3.2-2.3.1">The attacker can cause the Attester to derive keys from (<code>BF</code>, <code>VF'</code>)<a href="#appendix-A.3.2-2.3.1" class="pilcrow">¶</a></p>
@@ -3451,7 +3489,7 @@ spire-server entry create -spiffeID "spiffe://example.org/my-service"
               <p id="appendix-A.3.3-2.1.1"><strong>Result:</strong> The model demonstrated that this allows a passive attacker to decrypt the Phase 2 ciphertext and steal the <code>ValidatorFactor</code> (<code>VF</code>) (<code>not (event(VFReleased(vf)) &amp;&amp; attacker(vf))</code> was <strong>False</strong>).<a href="#appendix-A.3.3-2.1.1" class="pilcrow">¶</a></p>
 </li>
             <li class="normal" id="appendix-A.3.3-2.2">
-              <p id="appendix-A.3.3-2.2.1"><strong>Interpretation:</strong> This result formally establishes the security boundary discussed in <span><a href="#attester-state-compromise">#attester-state-compromise</a></span><a href="#appendix-A.3.3-2.2.1" class="pilcrow">¶</a></p>
+              <p id="appendix-A.3.3-2.2.1"><strong>Interpretation:</strong> This result from the preliminary model helps to define the security boundary discussed in <span><a href="#attester-state-compromise">#attester-state-compromise</a></span><a href="#appendix-A.3.3-2.2.1" class="pilcrow">¶</a></p>
 </li>
             <li class="normal" id="appendix-A.3.3-2.3">
               <p id="appendix-A.3.3-2.3.1"><strong>Mitigation:</strong> This analysis provides the rationale for hardware-rooted Instance Factor Pattern A when the threat model must assume compromise of the underlying provisioning platform. For pattern specifications, see <span><a href="#instance-factor-patterns-ifp">#instance-factor-patterns-ifp</a></span>.<a href="#appendix-A.3.3-2.3.1" class="pilcrow">¶</a></p>
@@ -4251,7 +4289,7 @@ spire-server entry create -spiffeID "spiffe://example.org/my-service"
               <p id="appendix-G.1.1-1.2.1"><strong>New Session-Bound Deployment Model:</strong> A primary deployment model using <strong>(D)TLS Exported Authenticators</strong> has been introduced. This aligns the protocol with the <strong>SEAT WG charter</strong> and directly supports continuous attestation for Trusted Execution Environments (TEEs).<a href="#appendix-G.1.1-1.2.1" class="pilcrow">¶</a></p>
 </li>
             <li class="normal" id="appendix-G.1.1-1.3">
-              <p id="appendix-G.1.1-1.3.1"><strong>Preliminary Formal Model of Attestation Renewal:</strong> Exploratory formal modeling and analysis of the attestation renewal model has been completed.<a href="#appendix-G.1.1-1.3.1" class="pilcrow">¶</a></p>
+              <p id="appendix-G.1.1-1.3.1"><strong>Preliminary Formal Model of Attestation Renewal:</strong> Exploratory formal modeling and analysis of the attestation renewal model has been conducted.<a href="#appendix-G.1.1-1.3.1" class="pilcrow">¶</a></p>
 </li>
             <li class="normal" id="appendix-G.1.1-1.4">
               <p id="appendix-G.1.1-1.4.1"><strong>Consolidation of Implementation Guide:</strong> Key concepts from the separate implementation guide (<code>draft-ritz-eca-impl-00</code>) have been merged into this core specification for clarity and completeness. This includes:<a href="#appendix-G.1.1-1.4.1" class="pilcrow">¶</a></p>
@@ -4268,7 +4306,7 @@ spire-server entry create -spiffeID "spiffe://example.org/my-service"
               </ul>
 </li>
             <li class="normal" id="appendix-G.1.1-1.5">
-              <p id="appendix-G.1.1-1.5.1">**Removed SAE from RECOMMENDED or normative transport requirements. Preliminary formal modeling and validation demonstrates that SAE is not required to maintain the security properties inherent in the logic of the applied cryptography.<a href="#appendix-G.1.1-1.5.1" class="pilcrow">¶</a></p>
+              <p id="appendix-G.1.1-1.5.1"><strong>Removed SAE from RECOMMENDED or normative transport requirements.</strong> Preliminary formal modeling suggests that SAE is not required to maintain the security properties inherent in the logic of the applied cryptography.<a href="#appendix-G.1.1-1.5.1" class="pilcrow">¶</a></p>
 </li>
             <li class="normal" id="appendix-G.1.1-1.6">
               <p id="appendix-G.1.1-1.6.1">**Removed chaining and heirachal trust section (attestation renewal is a stronger example of AR re-use)<a href="#appendix-G.1.1-1.6.1" class="pilcrow">¶</a></p>
