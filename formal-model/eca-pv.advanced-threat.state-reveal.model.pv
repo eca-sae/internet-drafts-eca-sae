@@ -1,7 +1,7 @@
 (* ECA Protocol - ProVerif Model v6 - ADVANCED THREATS
   State Reveal Test with Consolidated Binding Proof
   
-  See the BASELINE model for normative tests
+  See the "unbounded" model for normative tests
 *)
 
 (* --- Types --- *)
