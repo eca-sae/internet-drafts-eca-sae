@@ -17,7 +17,7 @@
    Renewal Factor (RF): A cryptographic credential presented 
    by an Attester as proof of an established identity.
    
-   Verifying Relying Party (VRP): An entity that fulfills the roles 
+   Verifying Relying Party [1] (VRP): An entity that fulfills the roles 
    of both Verifier and Relying Party, particularly in attestation 
    renewal procedures. The VRP directly appraises Evidence from an 
    Attester to make an authorization decision without consulting 
@@ -26,6 +26,8 @@
    Integrity Hash Beacon (IHB): A SHA-256 binding of BF to IF that 
    enables exposure-tolerant authentication while preventing 
    pre-computation attacks to mitigate MiTM threats.
+
+[1] https://www.researchgate.net/publication/396199290_Perspicuity_of_Attestation_Mechanisms_in_Confidential_Computing_Technical_Concepts
 *)
 
 (* --- Types --- *)
