@@ -149,6 +149,8 @@ ECA explicitly **does not** attempt to to provide solutions to several related b
 
 The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in BCP 14 [@!RFC2119] [@!RFC8174] when, and only when, they appear in all capitals, as shown here.
 
+## Roles
+
 **Attester**: An entity whose trustworthiness is to be evaluated, typically combining hardware, firmware and trusted software deployed in the cloud.
 
 **Verifier**: Conducts appraisal of Evidence to evaluate trustworthiness of the Attester, enforcing validation gates against reference values.
@@ -156,7 +158,6 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
   - The Verifier's appraisal relies on trust relationships with supply chain roles:
      - **Endorsers** (e.g., hardware manufacturers) provide cryptographic identity
      - **Reference Value Providers** supply expected measurements for appraisal
-     - **Identity Suppliers** establish the Attester's cryptographic identity
      
 **Relying Party**: Consumes signed Attestation Results to make authorization decisions.
 
@@ -164,13 +165,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 **Identity Supplier:** A supply chain role associated with giving a cryptographic identity to the Attester. [@?Sardar2025-Perspicuity] introduces this role to represent entities like hardware manufacturers or local CAs that provision the Attester. In the context of ECA, this role is collaboratively fulfilled by the Attester and Verifier, rather than being a separate, centralized provisioning authority. The identity is not pre-installed but *emerges deterministically* from the identity bootstrap procedure. In this procedure, the Attester generates its identity claims based on its inherent properties (`IF`), and the Verifier cryptographically ratifies them by issuing a signed Attestation Result.
 
-**Evidence:** A set of claims produced by an Attester about its state, cryptographically signed by the Attester itself. In ECA, this typically takes the form of a signed EAT containing claims such as the EUID, IHB, and Proof-of-Possession.
-
-**Entity Attestation Token (EAT):** A standardized token format [@!RFC9711] used to convey attestation evidence in a cryptographically verifiable form.
-
-**Attestation Result (AR):** A signed statement from a Verifier asserting the outcome of the appraisal of an Attester's Evidence. In ECA, this is a separate artifact from the Evidence, signed by the Verifier's long-term identity key.
-
-**Handle:** In ECA, the `Handle` as defined in [I-D.ietf-rats-reference-interaction-models] is realized through the combination of a public Binding Factor and a Verifier-supplied freshness value (e.g., a nonce or session context), eliminating the need for a trusted third-party Handle Distributor.
+## ECA Protocol Factors
 
 **Binding Factor (BF):** Scopes an attestation procedure to a specific context. In ECA procedures, the `BF`, in combination with a Verifier-issued nonce or session context, collectively serves as the Handle for the interaction. The `BF` does not require confidentiality; protocol security relies on its binding to the Instance Factor, not secrecy.
 
@@ -180,13 +175,25 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 **Renewal Factor (RF):** A cryptographic credential proving identity continuity. Following a full ECA identity lifecycle, `RF` is the signed *Attestation Result (AR)* issued by a Verifier from a prior bootstrap or renewal procedure. It is presented by an Attester as proof of an established identity.
 
+## Related Concepts
+
+**Evidence:** A set of claims produced by an Attester about its state, cryptographically signed by the Attester itself. In ECA, this typically takes the form of a signed EAT containing claims such as the EUID, IHB, and Proof-of-Possession.
+
 **Instance Factor Pattern (IFP):** The set of defined methods for sourcing the private value for Instance Factor (`IF`). Three patterns are defined: hardware-rooted (Pattern A), orchestrator-provisioned (Pattern B), and artifact-based (Pattern C). For detailed specifications, see [](#instance-factor-patterns-ifp).
+
+**Handle:** In ECA, the `Handle` as defined in [I-D.ietf-rats-reference-interaction-models] can be realized through the combination of a public Binding Factor and a Verifier-supplied freshness value (e.g., a nonce or session context).
 
 **Joint Factor Possession:** The cryptographic property where security derives from proving knowledge of multiple factors (`BF`+`VF` for bootstrap, `BF`+`RF`+`IF` for attestation renewal) rather than secrecy of individual components.
 
+**Exchange Identifier (eca_uuid):** A unique identifier for each attestation lifecycle instance, used to construct artifact repository paths.
+
+## Artifacts
+
 **Integrity Hash Beacon (IHB):** A SHA-256 binding of `BF` to `IF` that enables exposure-tolerant authentication while preventing pre-computation attacks to mitigate MiTM threats.
 
-**Exchange Identifier (eca_uuid):** A unique identifier for each attestation lifecycle instance, used to construct artifact repository paths.
+**Entity Attestation Token (EAT):** A standardized token format [@!RFC9711] used to convey attestation evidence in a cryptographically verifiable form.
+
+**Attestation Result (AR):** A signed statement from a Verifier asserting the outcome of the appraisal of an Attester's Evidence. In ECA, this is a separate artifact from the Evidence, signed by the Verifier's long-term identity key.
 
 # Conceptual Model (Informational) {#conceptual-model}
 
