@@ -52,7 +52,7 @@ ECA has two distinct cryptographic attestation procedures to address each specif
 
 1. **Identity Bootstrap procedure** - For initial "cold start" establishment of verifiable identity in environments not yet provisioned. This profile is a concrete instantiations of the Challenge/Response model and provides a comprehensive alternative to the bearer-token model in heterogeneous environments.
 
-2. **Attestation Renewal procedure** - A lightweight, single round-trip attestation procedure for continuous verification of established identity and state, ideal for long-running workloads and TEEs. 
+2. **Attestation Renewal procedure** - A lightweight, single round-trip attestation procedure based on post-handshake attestation [@?I-D.fossati-tls-exported-attestation] for continuous verification of established identity and state, ideal for long-running workloads and TEEs. 
 
 ## Multi-Cloud and Heterogeneous Environments
 
@@ -588,7 +588,7 @@ A preliminary formal model for this procedure and its security properties are pr
 ## Prerequisites {#attestation-renewal-prerequisites}
 
 -   The instance possesses a Renewal Factor (RF).
--   The Verifying Relying Party (VRP) [@?Sardar2025-Perspicuity] has a record of the expected identity associated with the `RF`.
+-   The Verifying Relying Party (VRP) has a record of the expected identity associated with the `RF`.
 -   The Binding Factor (BF) remains stable or is updated according to policy.
 
 ## Generic Attestation Renewal Pattern {#generic-renewal-pattern}
@@ -784,7 +784,9 @@ An end-to-end implementation of the bootstrap profile (tracked at <https://githu
 
 The design of this protocol was heavily influenced by the simplicity and security goals of the age file encryption tool. The protocol's core cryptographic mechanisms would not be as simple or robust without the prior work of the IETF community in standardizing modern primitives, particularly Hybrid Public Key Encryption (HPKE) in [@?RFC9180].
 
-The integration with Exported Authenticators draws from [@?I-D.fossati-tls-exported-attestation]. The authors wish to thank the contributors of this foundational draft for making this work possible.
+The integration with Exported Authenticators draws from [@?I-D.fossati-tls-exported-attestation]. 
+
+The authors wish to thank the contributors of these foundational specifications for making this work possible.
 
 {backmatter}
 
@@ -1138,7 +1140,7 @@ This revision represents a significant architectural evolution of the ECA protoc
 
 * **Protocol Renaming:** The draft is now titled **"Entity and Compute Attestation"** (formerly "Ephemeral Compute Attestation") to reflect its broadened applicability to both ephemeral and long-running entities.
 * **New Terminology:** Introduced new core terms to support the Dual-Attestation model, most notably the **Renewal Factor (RF)**, which is the credential used to prove identity continuity in attestation renewal procedures. The roles of **Binding Factor (BF)** and **Instance Factor (IF)** have been clarified for each attestation procedure type. 
-* Added **Verifying Relying Party (VRP)** to clarify roles in renewal procedures. Clarified the distinction between **Evidence** (from Attester) and **Attestation Result** (from Verifier) [@?Sardar2025-Perspicuity].
+* Added **Verifying Relying Party (VRP)** to clarify roles in renewal procedures. Clarified the distinction between **Evidence** (from Attester) and **Attestation Result** (from Verifier).
 
 ### Expanded Integration and Use Cases
 
@@ -1166,3 +1168,5 @@ This revision represents a significant architectural evolution of the ECA protoc
 - The separate `PoP` and `JP Proof` claims in the EAT Evidence have been consolidated into a single `pop_tag` claim. This simplifies the final proof and its verification.
 - The `ECA-VM-BOOTSTRAP-V1` MTI profile has been updated to reflect the new single binding proof construction.
 - BREAKING CHANGE: The EAT `Evidence` payload has been modified. The separate `PoP` (EAT Key 274) and `JP Proof` (EAT Key 276) claims are replaced by a single consolidated `pop_tag` claim (EAT Key 274). Implementations must be updated to use the new proof construction method defined in the reference profile.
+
+
