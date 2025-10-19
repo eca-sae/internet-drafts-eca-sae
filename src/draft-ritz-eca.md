@@ -160,9 +160,9 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
      
 **Relying Party**: Consumes signed Attestation Results to make authorization decisions.
 
-**Verifying Relying Party (VRP):** An entity that fulfills the roles of both Verifier and Relying Party, particularly in attestation renewal procedures. The VRP directly appraises Evidence from an Attester to make an authorization decision without consulting an external Verifier.
+**Verifying Relying Party (VRP)**: An entity that fulfills the roles of both Verifier and Relying Party. This document adopts the term from [@?Sardar2025-Perspicuity], which merges these roles to align with common industry deployments and reduce privacy concerns. In the context of ECA, a VRP is the entity that directly appraises Evidence from an Attester during an attestation renewal procedure to make an authorization decision.
 
-**Identity Supplier:** In the context of ECA, this role is collaboratively fulfilled by the Attester and Verifier. The identity is not provisioned by a central authority but *emerges deterministically* from the identity bootstrap procedure, where the Attester generates its identity claims based on its inherent properties (`IF`) and the Verifier cryptographically ratifies them by issuing a signed Attestation Result.
+**Identity Supplier:** A supply chain role associated with giving a cryptographic identity to the Attester. [@?Sardar2025-Perspicuity] introduces this role to represent entities like hardware manufacturers or local CAs that provision the Attester. In the context of ECA, this role is collaboratively fulfilled by the Attester and Verifier, rather than being a separate, centralized provisioning authority. The identity is not pre-installed but *emerges deterministically* from the identity bootstrap procedure. In this procedure, the Attester generates its identity claims based on its inherent properties (`IF`), and the Verifier cryptographically ratifies them by issuing a signed Attestation Result.
 
 **Evidence:** A set of claims produced by an Attester about its state, cryptographically signed by the Attester itself. In ECA, this typically takes the form of a signed EAT containing claims such as the EUID, IHB, and Proof-of-Possession.
 
@@ -1094,6 +1094,17 @@ This registry defines application-specific error codes that are used in addition
 | `REPLAY_DETECTED` | `REPLAY_DETECTED` | - | Attestation procedure ID was reused |
 | `BINDING_INVALID` | `BINDING_INVALID` | - | Freshness binding check failed |
 
+<reference anchor="Sardar2025-Perspicuity" 
+  target="https://www.researchgate.net/publication/396199290_Perspicuity_of_Attestation_Mechanisms_in_Confidential_Computing_Technical_Concepts">
+  <front>
+    <title>Perspicuity of Attestation Mechanisms in Confidential Computing: Technical Concepts</title>
+    <author initials="M. U." surname="Sardar" fullname="Muhammad Usama Sardar">
+      <organization>TU Dresden</organization>
+    </author>
+    <date year="2025" month="October"/>
+  </front>
+</reference>
+
 # Change log
 
 ## Changes since -00
@@ -1121,7 +1132,8 @@ This revision represents a significant architectural evolution of the ECA protoc
 ### Scope and Terminology Refinements
 
 * **Protocol Renaming:** The draft is now titled **"Entity and Compute Attestation"** (formerly "Ephemeral Compute Attestation") to reflect its broadened applicability to both ephemeral and long-running entities.
-* **New Terminology:** Introduced new core terms to support the Dual-Attestation model, most notably the **Renewal Factor (RF)**, which is the credential used to prove identity continuity in attestation renewal procedures. The roles of **Binding Factor (BF)** and **Instance Factor (IF)** have been clarified for each attestation procedure type. Added **Verifying Relying Party (VRP)** to clarify roles in renewal procedures. Clarified the distinction between **Evidence** (from Attester) and **Attestation Result** (from Verifier).
+* **New Terminology:** Introduced new core terms to support the Dual-Attestation model, most notably the **Renewal Factor (RF)**, which is the credential used to prove identity continuity in attestation renewal procedures. The roles of **Binding Factor (BF)** and **Instance Factor (IF)** have been clarified for each attestation procedure type. 
+* Added **Verifying Relying Party (VRP)** to clarify roles in renewal procedures. Clarified the distinction between **Evidence** (from Attester) and **Attestation Result** (from Verifier) [@?Sardar2025-Perspicuity].
 
 ### Expanded Integration and Use Cases
 
