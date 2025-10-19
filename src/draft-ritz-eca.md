@@ -3,7 +3,7 @@ title = "Entity and Compute Attestation (ECA)"
 abbrev = "ECA"
 category = "exp"
 docname = "draft-ritz-eca-01"
-date = "2025-10-18T00:00:00Z"
+date = "2025-10-19T00:00:00Z"
 ipr = "trust200902"
 area = "Security"
 pi = ["toc", "sortrefs", "symrefs", "strict"]
@@ -588,7 +588,7 @@ A preliminary formal model for this procedure and its security properties are pr
 ## Prerequisites {#attestation-renewal-prerequisites}
 
 -   The instance possesses a Renewal Factor (RF).
--   The Verifying Relying Party (VRP) has a record of the expected identity associated with the `RF`.
+-   The Verifying Relying Party (VRP) [@?Sardar2025-Perspicuity] has a record of the expected identity associated with the `RF`.
 -   The Binding Factor (BF) remains stable or is updated according to policy.
 
 ## Generic Attestation Renewal Pattern {#generic-renewal-pattern}
